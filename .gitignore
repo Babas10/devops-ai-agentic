@@ -1,0 +1,47 @@
+# OpenShift / Kubernetes credentials
+kubeconfig
+*.kubeconfig
+.kube/
+
+# Ansible secrets
+*.vault
+ansible/vault_pass
+ansible/.vault_pass
+ansible/vault_password
+**/group_vars/**/*.vault.yml
+**/host_vars/**/*.vault.yml
+
+# Cluster connection env files
+.env
+.env.*
+cluster_creds*
+cluster_info*
+
+# SealedSecrets private key (public key is safe to commit)
+sealed-secrets-key*
+tls.key
+*.pem
+!*.pub.pem
+
+# Local override files
+*.local.yml
+*.local.yaml
+override*.yml
+override*.yaml
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/settings.json
+*.swp
+*~
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Temporary
+tmp/
+*.tmp

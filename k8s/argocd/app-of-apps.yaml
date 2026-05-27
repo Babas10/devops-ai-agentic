@@ -1,0 +1,26 @@
+---
+# Root Application — manages all child Applications in k8s/apps/
+# This file itself is applied by the Ansible bootstrap playbook.
+# ArgoCD will then reconcile k8s/apps/ and create each child Application.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: openshift-gitops
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Babas10/devops-ai-agentic.git
+    targetRevision: main
+    path: k8s/apps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-gitops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

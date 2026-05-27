@@ -1,0 +1,25 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rhoai
+  namespace: openshift-gitops
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/etiennedubois/devops-ai-agentic.git
+    targetRevision: main
+    path: k8s/rhoai
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: redhat-ods-operator
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # RHOAI CRDs take time; allow retries
+      - ServerSideApply=true

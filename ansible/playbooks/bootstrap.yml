@@ -1,0 +1,161 @@
+---
+# Bootstrap playbook — installs OpenShift GitOps operator, then hands off to ArgoCD.
+#
+# Usage:
+#   ansible-playbook ansible/playbooks/bootstrap.yml \
+#     -e ocp_api_url=$OCP_API \
+#     -e ocp_username=$OCP_USER \
+#     -e ocp_password=$OCP_PASS
+#
+- name: Bootstrap OpenShift cluster
+  hosts: localhost
+  gather_facts: false
+
+  vars:
+    # Override via -e at runtime — never hardcode here
+    ocp_api_url: "{{ lookup('env', 'OCP_API') }}"
+    ocp_username: "{{ lookup('env', 'OCP_USER') }}"
+    ocp_password: "{{ lookup('env', 'OCP_PASS') }}"
+    # Derive OAuth server URL from API URL:
+    # https://api.ocp.<id>.sandbox<n>.opentlc.com:6443
+    # -> https://oauth-openshift.apps.ocp.<id>.sandbox<n>.opentlc.com
+    ocp_oauth_url: "{{ ocp_api_url | regex_replace('https://api\\.(.+?):\\d+$', 'https://oauth-openshift.apps.\\1') }}"
+
+  tasks:
+    # -------------------------------------------------------------------------
+    # Authenticate via OpenShift OAuth server
+    # -------------------------------------------------------------------------
+    - name: Request OpenShift OAuth token
+      ansible.builtin.uri:
+        url: "{{ ocp_oauth_url }}/oauth/authorize?response_type=token&client_id=openshift-challenging-client"
+        method: GET
+        url_username: "{{ ocp_username }}"
+        url_password: "{{ ocp_password }}"
+        force_basic_auth: true
+        validate_certs: false
+        follow_redirects: "none"
+        headers:
+          X-CSRF-Token: "1"
+        status_code: [302]
+      register: oauth_response
+
+    - name: Extract access token from OAuth redirect
+      ansible.builtin.set_fact:
+        k8s_api_key: "{{ oauth_response.location | regex_search('access_token=([^&]+)', '\\1') | first }}"
+
+    # -------------------------------------------------------------------------
+    # Install OpenShift GitOps operator
+    # Uses a dedicated namespace (openshift-gitops-operator), not the shared
+    # openshift-operators namespace which already has its own global OperatorGroup.
+    # -------------------------------------------------------------------------
+    - name: Create operator and operand namespaces
+      kubernetes.core.k8s:
+        host: "{{ ocp_api_url }}"
+        api_key: "{{ k8s_api_key }}"
+        validate_certs: false
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: "{{ item }}"
+      loop:
+        - "{{ gitops_operator_namespace }}"
+        - "{{ gitops_argocd_namespace }}"
+      tags: gitops
+
+    - name: Create OperatorGroup in openshift-gitops-operator namespace
+      kubernetes.core.k8s:
+        host: "{{ ocp_api_url }}"
+        api_key: "{{ k8s_api_key }}"
+        validate_certs: false
+        state: present
+        definition:
+          apiVersion: operators.coreos.com/v1
+          kind: OperatorGroup
+          metadata:
+            name: openshift-gitops-operator
+            namespace: "{{ gitops_operator_namespace }}"
+      tags: gitops
+
+    - name: Subscribe to OpenShift GitOps operator
+      kubernetes.core.k8s:
+        host: "{{ ocp_api_url }}"
+        api_key: "{{ k8s_api_key }}"
+        validate_certs: false
+        state: present
+        definition:
+          apiVersion: operators.coreos.com/v1alpha1
+          kind: Subscription
+          metadata:
+            name: "{{ gitops_operator_name }}"
+            namespace: "{{ gitops_operator_namespace }}"
+          spec:
+            channel: "{{ gitops_operator_channel }}"
+            installPlanApproval: Automatic
+            name: "{{ gitops_operator_name }}"
+            source: redhat-operators
+            sourceNamespace: openshift-marketplace
+      tags: gitops
+
+    - name: Wait for ArgoCD default instance to be ready
+      kubernetes.core.k8s_info:
+        host: "{{ ocp_api_url }}"
+        api_key: "{{ k8s_api_key }}"
+        validate_certs: false
+        api_version: argoproj.io/v1beta1
+        kind: ArgoCD
+        name: openshift-gitops
+        namespace: "{{ gitops_argocd_namespace }}"
+      register: argocd_instance
+      until:
+        - argocd_instance.resources | length > 0
+        - argocd_instance.resources[0].status is defined
+        - argocd_instance.resources[0].status.phase is defined
+        - argocd_instance.resources[0].status.phase == "Available"
+      retries: 30
+      delay: 20
+      tags: gitops
+
+    # -------------------------------------------------------------------------
+    # Apply App of Apps — ArgoCD takes over from here
+    # -------------------------------------------------------------------------
+    - name: Apply App of Apps ArgoCD Application
+      kubernetes.core.k8s:
+        host: "{{ ocp_api_url }}"
+        api_key: "{{ k8s_api_key }}"
+        validate_certs: false
+        state: present
+        definition:
+          apiVersion: argoproj.io/v1alpha1
+          kind: Application
+          metadata:
+            name: app-of-apps
+            namespace: "{{ gitops_argocd_namespace }}"
+          spec:
+            project: default
+            source:
+              repoURL: "{{ gitops_repo_url }}"
+              targetRevision: "{{ gitops_repo_revision }}"
+              path: "{{ gitops_app_of_apps_path }}"
+            destination:
+              server: https://kubernetes.default.svc
+              namespace: "{{ gitops_argocd_namespace }}"
+            syncPolicy:
+              automated:
+                prune: true
+                selfHeal: true
+      tags: argocd-apps
+
+    # -------------------------------------------------------------------------
+    # Revoke token
+    # -------------------------------------------------------------------------
+    - name: Revoke OpenShift OAuth token
+      ansible.builtin.uri:
+        url: "{{ ocp_oauth_url }}/oauth/token/{{ k8s_api_key }}"
+        method: DELETE
+        validate_certs: false
+        headers:
+          Authorization: "Bearer {{ k8s_api_key }}"
+        status_code: [200, 201, 204, 404]
+      when: k8s_api_key is defined
