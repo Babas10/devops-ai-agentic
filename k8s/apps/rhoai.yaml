@@ -4,12 +4,10 @@ kind: Application
 metadata:
   name: rhoai
   namespace: openshift-gitops
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: https://github.com/etiennedubois/devops-ai-agentic.git
+    repoURL: https://github.com/Babas10/devops-ai-agentic
     targetRevision: main
     path: k8s/rhoai
   destination:
