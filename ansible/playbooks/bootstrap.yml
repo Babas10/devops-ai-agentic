@@ -120,6 +120,32 @@
       tags: gitops
 
     # -------------------------------------------------------------------------
+    # Grant ArgoCD application controller cluster-admin
+    # Required to manage CRDs (Sealed Secrets, RHOAI) and cross-namespace resources.
+    # Must be done here — ArgoCD cannot apply the binding that grants itself permissions.
+    # -------------------------------------------------------------------------
+    - name: Grant ArgoCD application controller cluster-admin
+      kubernetes.core.k8s:
+        host: "{{ ocp_api_url }}"
+        api_key: "{{ k8s_api_key }}"
+        validate_certs: false
+        state: present
+        definition:
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: openshift-gitops-argocd-application-controller-cluster-admin
+          roleRef:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: cluster-admin
+          subjects:
+            - kind: ServiceAccount
+              name: openshift-gitops-argocd-application-controller
+              namespace: "{{ gitops_argocd_namespace }}"
+      tags: gitops
+
+    # -------------------------------------------------------------------------
     # Apply App of Apps — ArgoCD takes over from here
     # -------------------------------------------------------------------------
     - name: Apply App of Apps ArgoCD Application
