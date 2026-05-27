@@ -7,6 +7,6 @@ gitops_operator_name: openshift-gitops-operator
 gitops_argocd_namespace: openshift-gitops
 
 # Repository this cluster points to for ArgoCD App of Apps
-gitops_repo_url: https://github.com/Babas10/devops-ai-agentic.git
+gitops_repo_url: https://github.com/Babas10/devops-ai-agentic
 gitops_repo_revision: main
 gitops_app_of_apps_path: k8s/argocd

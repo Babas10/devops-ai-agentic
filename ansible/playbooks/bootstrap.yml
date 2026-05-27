@@ -38,10 +38,12 @@
           X-CSRF-Token: "1"
         status_code: [302]
       register: oauth_response
+      tags: always
 
     - name: Extract access token from OAuth redirect
       ansible.builtin.set_fact:
         k8s_api_key: "{{ oauth_response.location | regex_search('access_token=([^&]+)', '\\1') | first }}"
+      tags: always
 
     # -------------------------------------------------------------------------
     # Install OpenShift GitOps operator
@@ -159,3 +161,4 @@
           Authorization: "Bearer {{ k8s_api_key }}"
         status_code: [200, 201, 204, 404]
       when: k8s_api_key is defined
+      tags: always
