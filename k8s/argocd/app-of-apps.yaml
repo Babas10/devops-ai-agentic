@@ -7,8 +7,6 @@ kind: Application
 metadata:
   name: app-of-apps
   namespace: openshift-gitops
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
