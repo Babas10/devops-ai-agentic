@@ -147,32 +147,20 @@
 
     # -------------------------------------------------------------------------
     # Apply App of Apps — ArgoCD takes over from here
+    # kubernetes.core.k8s silently fails to persist Application CRs in some
+    # environments; use oc apply directly which reliably creates and keeps them.
     # -------------------------------------------------------------------------
     - name: Apply App of Apps ArgoCD Application
-      kubernetes.core.k8s:
-        host: "{{ ocp_api_url }}"
-        api_key: "{{ k8s_api_key }}"
-        validate_certs: false
-        state: present
-        definition:
-          apiVersion: argoproj.io/v1alpha1
-          kind: Application
-          metadata:
-            name: app-of-apps
-            namespace: "{{ gitops_argocd_namespace }}"
-          spec:
-            project: default
-            source:
-              repoURL: "{{ gitops_repo_url }}"
-              targetRevision: "{{ gitops_repo_revision }}"
-              path: "{{ gitops_app_of_apps_path }}"
-            destination:
-              server: https://kubernetes.default.svc
-              namespace: "{{ gitops_argocd_namespace }}"
-            syncPolicy:
-              automated:
-                prune: true
-                selfHeal: true
+      ansible.builtin.command:
+        argv:
+          - oc
+          - apply
+          - --server={{ ocp_api_url }}
+          - --token={{ k8s_api_key }}
+          - --insecure-skip-tls-verify=true
+          - -f
+          - "{{ playbook_dir }}/../../k8s/argocd/app-of-apps.yaml"
+      changed_when: true
       tags: argocd-apps
 
     # -------------------------------------------------------------------------
