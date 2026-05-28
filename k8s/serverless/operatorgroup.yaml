@@ -1,0 +1,9 @@
+---
+# Global scope (no targetNamespaces) — same pattern as RHOAI OperatorGroup.
+apiVersion: operators.coreos.com/v1
+kind: OperatorGroup
+metadata:
+  name: serverless-operator
+  namespace: openshift-serverless
+spec:
+  upgradeStrategy: Default

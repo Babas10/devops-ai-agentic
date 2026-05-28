@@ -1,0 +1,14 @@
+---
+# Service Mesh 3 installs into openshift-operators which already has a global
+# OperatorGroup (global-operators) — no Namespace or OperatorGroup needed.
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: servicemeshoperator3
+  namespace: openshift-operators
+spec:
+  channel: stable
+  installPlanApproval: Automatic
+  name: servicemeshoperator3
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace

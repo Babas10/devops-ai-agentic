@@ -1,0 +1,21 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: serverless
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Babas10/devops-ai-agentic
+    targetRevision: main
+    path: k8s/serverless
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-serverless
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
