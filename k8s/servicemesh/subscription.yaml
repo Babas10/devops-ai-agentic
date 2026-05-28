@@ -1,14 +1,18 @@
 ---
-# Service Mesh 3 installs into openshift-operators which already has a global
+# Service Mesh v2 installs into openshift-operators which already has a global
 # OperatorGroup (global-operators) — no Namespace or OperatorGroup needed.
+# NOTE: RHOAI 2.25.x requires Service Mesh v2 (servicemeshoperator). It is
+# hardcoded to look for this subscription name and uses ServiceMeshControlPlane
+# (SM v2 API). SM v3 (servicemeshoperator3) is not supported by RHOAI 2.25.x.
+# SM v2 and SM v3 cannot coexist — they conflict on Istio CRDs.
 apiVersion: operators.coreos.com/v1alpha1
 kind: Subscription
 metadata:
-  name: servicemeshoperator3
+  name: servicemeshoperator
   namespace: openshift-operators
 spec:
   channel: stable
   installPlanApproval: Automatic
-  name: servicemeshoperator3
+  name: servicemeshoperator
   source: redhat-operators
   sourceNamespace: openshift-marketplace
