@@ -56,6 +56,45 @@ Once the App of Apps Application is applied, ArgoCD reconciles the repo and mana
 
 ---
 
+## One-Time Setup: Sealed Secrets Key
+
+Before running the bootstrap for the first time, generate a signing key pair and store it in Ansible Vault. This key is reused across all cluster re-installs so that SealedSecrets committed to git can always be decrypted.
+
+```bash
+# 1. Generate a 4096-bit RSA key pair (valid for 10 years)
+openssl req -x509 -nodes -newkey rsa:4096 \
+  -keyout /tmp/sealed-secrets-tls.key \
+  -out /tmp/sealed-secrets-tls.crt \
+  -subj "/CN=sealed-secret/O=sealed-secret" \
+  -days 3650
+
+# 2. Create the vault file from the example
+cp ansible/inventory/group_vars/vault.yml.example \
+   ansible/inventory/group_vars/vault.yml
+
+# 3. Paste the key contents into vault.yml (replace the placeholder lines)
+#    sealed_secrets_tls_crt: | <contents of /tmp/sealed-secrets-tls.crt>
+#    sealed_secrets_tls_key: | <contents of /tmp/sealed-secrets-tls.key>
+
+# 4. Encrypt in place and commit
+ansible-vault encrypt ansible/inventory/group_vars/vault.yml
+git add ansible/inventory/group_vars/vault.yml
+git commit -m "chore: add sealed secrets signing key (vault-encrypted)"
+
+# 5. Securely delete the plaintext key files
+rm /tmp/sealed-secrets-tls.key /tmp/sealed-secrets-tls.crt
+```
+
+**Public cert for sealing new secrets** — fetch from the running controller after bootstrap:
+```bash
+kubeseal --fetch-cert \
+  --controller-name=sealed-secrets-controller \
+  --controller-namespace=sealed-secrets \
+  > pub-cert.pem
+```
+
+---
+
 ## Prerequisites
 
 Install these tools locally before running the bootstrap:
@@ -84,6 +123,18 @@ export OCP_USER=admin
 export OCP_PASS=<password>
 
 ansible-playbook ansible/playbooks/bootstrap.yml \
+  --ask-vault-pass \
+  -e ocp_api_url=$OCP_API \
+  -e ocp_username=$OCP_USER \
+  -e ocp_password=$OCP_PASS
+```
+
+Or use a vault password file (gitignored):
+```bash
+echo "mypassword" > ansible/vault_pass
+
+ansible-playbook ansible/playbooks/bootstrap.yml \
+  --vault-password-file ansible/vault_pass \
   -e ocp_api_url=$OCP_API \
   -e ocp_username=$OCP_USER \
   -e ocp_password=$OCP_PASS
@@ -94,6 +145,9 @@ You can also run only specific phases using tags:
 ```bash
 # Only install the GitOps operator (skip App of Apps)
 ansible-playbook ansible/playbooks/bootstrap.yml ... --tags gitops
+
+# Only pre-create the Sealed Secrets signing key (controller must not be running yet)
+ansible-playbook ansible/playbooks/bootstrap.yml ... --tags sealed-secrets
 
 # Only apply the App of Apps (ArgoCD must already be running)
 ansible-playbook ansible/playbooks/bootstrap.yml ... --tags argocd-apps
