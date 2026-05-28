@@ -4,12 +4,17 @@ kubeconfig
 .kube/
 
 # Ansible secrets
+# vault.yml files are committed when encrypted with ansible-vault.
+# The .example file shows the plaintext structure; the real file must be encrypted.
 *.vault
 ansible/vault_pass
 ansible/.vault_pass
 ansible/vault_password
 **/group_vars/**/*.vault.yml
 **/host_vars/**/*.vault.yml
+
+# Sealed Secrets key generation artifacts (keep off disk after vaulting)
+/tmp/sealed-secrets-tls.*
 
 # Cluster connection env files
 .env

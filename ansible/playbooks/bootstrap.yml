@@ -146,6 +146,45 @@
       tags: gitops
 
     # -------------------------------------------------------------------------
+    # Pre-create Sealed Secrets signing key
+    # Must happen before ArgoCD deploys the controller so it finds the key on
+    # first startup and uses it instead of generating a new one.
+    # The key lives in ansible/inventory/group_vars/vault.yml (Ansible Vault).
+    # -------------------------------------------------------------------------
+    - name: Create sealed-secrets namespace
+      kubernetes.core.k8s:
+        host: "{{ ocp_api_url }}"
+        api_key: "{{ k8s_api_key }}"
+        validate_certs: false
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Namespace
+          metadata:
+            name: sealed-secrets
+      tags: sealed-secrets
+
+    - name: Pre-create Sealed Secrets signing key
+      kubernetes.core.k8s:
+        host: "{{ ocp_api_url }}"
+        api_key: "{{ k8s_api_key }}"
+        validate_certs: false
+        state: present
+        definition:
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: sealed-secrets-key
+            namespace: sealed-secrets
+            labels:
+              sealedsecrets.bitnami.com/sealed-secrets-key: active
+          type: kubernetes.io/tls
+          stringData:
+            tls.crt: "{{ sealed_secrets_tls_crt }}"
+            tls.key: "{{ sealed_secrets_tls_key }}"
+      tags: sealed-secrets
+
+    # -------------------------------------------------------------------------
     # Apply App of Apps — ArgoCD takes over from here
     # kubernetes.core.k8s silently fails to persist Application CRs in some
     # environments; use oc apply directly which reliably creates and keeps them.

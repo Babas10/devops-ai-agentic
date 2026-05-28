@@ -1,0 +1,46 @@
+---
+# Ansible Vault encrypted variables — DO NOT commit this file unencrypted.
+#
+# SETUP (one-time, per key pair):
+#
+#   1. Generate a key pair:
+#        openssl req -x509 -nodes -newkey rsa:4096 \
+#          -keyout /tmp/sealed-secrets-tls.key \
+#          -out /tmp/sealed-secrets-tls.crt \
+#          -subj "/CN=sealed-secret/O=sealed-secret" \
+#          -days 3650
+#
+#   2. Copy this file:
+#        cp ansible/inventory/group_vars/vault.yml.example \
+#           ansible/inventory/group_vars/vault.yml
+#
+#   3. Fill in the values below with the contents of the generated files.
+#
+#   4. Encrypt and commit:
+#        ansible-vault encrypt ansible/inventory/group_vars/vault.yml
+#        git add ansible/inventory/group_vars/vault.yml
+#
+# USAGE:
+#   ansible-playbook ansible/playbooks/bootstrap.yml \
+#     --ask-vault-pass \
+#     -e ocp_api_url=$OCP_API \
+#     -e ocp_username=$OCP_USER \
+#     -e ocp_password=$OCP_PASS
+#
+#   Or store the vault password in a file (gitignored):
+#     echo "mypassword" > ansible/vault_pass
+#     ansible-playbook ... --vault-password-file ansible/vault_pass
+#
+# To back up or rotate the key:
+#   - Decrypt: ansible-vault decrypt ansible/inventory/group_vars/vault.yml
+#   - Edit, then re-encrypt: ansible-vault encrypt ansible/inventory/group_vars/vault.yml
+#   - After rotating the key on-cluster, re-seal all secrets with the new public cert.
+
+sealed_secrets_tls_crt: |
+  -----BEGIN CERTIFICATE-----
+  <paste the contents of sealed-secrets-tls.crt here>
+  -----END CERTIFICATE-----
+sealed_secrets_tls_key: |
+  -----BEGIN PRIVATE KEY-----
+  <paste the contents of sealed-secrets-tls.key here>
+  -----END PRIVATE KEY-----
