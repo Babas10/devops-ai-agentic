@@ -23,11 +23,14 @@ Serverless operator must be installed for this component's configuration
 
 ### Install pattern
 
-**OpenShift Service Mesh 3**
-- Operator name: `servicemeshoperator3`
+**OpenShift Service Mesh v2** — required by RHOAI 2.25.x
+- Operator name: `servicemeshoperator`
 - Channel: `stable`
 - Namespace: `openshift-operators`
 - OperatorGroup: none needed — `openshift-operators` already has the global `global-operators` OperatorGroup
+- RHOAI manages the `ServiceMeshControlPlane` CR (`data-science-smcp` in `istio-system`) automatically
+
+> **Note:** RHOAI 2.25.x does NOT support Service Mesh v3 (`servicemeshoperator3`). It is hardcoded to look for the subscription name `servicemeshoperator` and uses the SM v2 `ServiceMeshControlPlane` API. SM v2 and SM v3 conflict on Istio CRDs and cannot coexist on the same cluster. SM v3 support in RHOAI is expected in a future release.
 
 **OpenShift Serverless**
 - Operator name: `serverless-operator`
