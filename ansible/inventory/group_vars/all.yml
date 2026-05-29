@@ -1,8 +1,14 @@
 ---
 # OpenShift GitOps operator settings
-# Dedicated namespace OCP creates for the GitOps operator (not the shared openshift-operators)
+#
+# Some clusters (e.g. RHDP GPU sandboxes) ship with GitOps pre-installed in
+# openshift-operators on channel gitops-1.15. The bootstrap detects this and
+# skips operator installation automatically — it only applies the app-of-apps.
+#
+# On bare clusters, the operator is installed in a dedicated namespace to avoid
+# conflicting with the global OperatorGroup already present in openshift-operators.
 gitops_operator_namespace: openshift-gitops-operator
-gitops_operator_channel: latest
+gitops_operator_channel: gitops-1.15
 gitops_operator_name: openshift-gitops-operator
 gitops_argocd_namespace: openshift-gitops
 

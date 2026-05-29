@@ -1,0 +1,32 @@
+---
+# KServe InferenceService — Qwen2.5-7B-Instruct via vLLM GPU runtime.
+#
+# Prerequisites:
+#   - ServingRuntime 'vllm-gpu' must exist in this namespace
+#   - Secret 'hf-token' must exist in this namespace (see hf-token-sealed.yaml)
+#   - NVIDIA L4 GPU node must be schedulable (worker-gpu role)
+#
+# Deployment mode: Serverless (default on this cluster — Knative Serving is Managed).
+# The InferenceService gets a Knative Route and scales to 0 when idle.
+# minReplicas: 1 keeps it warm to avoid cold start during the demo.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen
+  namespace: ai-agentic
+spec:
+  predictor:
+    minReplicas: 1
+    model:
+      modelFormat:
+        name: vLLM
+      runtime: vllm-gpu
+      resources:
+        requests:
+          cpu: "4"
+          memory: 16Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "8"
+          memory: 24Gi
+          nvidia.com/gpu: "1"

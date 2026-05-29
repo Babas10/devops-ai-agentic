@@ -1,4 +1,16 @@
 ---
+# DataScienceCluster — matches the configuration present on RHDP GPU clusters.
+#
+# Components enabled (Managed):
+#   dashboard, datasciencepipelines, kserve (Serverless), modelmeshserving, workbenches
+#
+# Components disabled (Removed):
+#   codeflare, kueue, modelregistry, ray, trainingoperator, trustyai
+#   — these are Removed on RHDP GPU sandboxes; enabling them installs heavyweight
+#   dependencies not needed for this demo.
+#
+# kserve.serving.managementState: Managed — installs Knative Serving (requires
+# Service Mesh + Serverless operators, managed by ArgoCD sync waves 2+3).
 apiVersion: datasciencecluster.opendatahub.io/v1
 kind: DataScienceCluster
 metadata:
@@ -12,15 +24,12 @@ metadata:
 spec:
   components:
     codeflare:
-      managementState: Managed
+      managementState: Removed
     dashboard:
       managementState: Managed
     datasciencepipelines:
-      argoWorkflowsControllers:
-        managementState: Managed
       managementState: Managed
-    feastoperator:
-      managementState: Removed
+    feastoperator: {}
     kserve:
       managementState: Managed
       nim:
@@ -35,24 +44,22 @@ spec:
     kueue:
       defaultClusterQueueName: default
       defaultLocalQueueName: default
-      managementState: Managed
-    llamastackoperator:
       managementState: Removed
+    llamastackoperator: {}
     modelmeshserving:
       managementState: Managed
     modelregistry:
-      managementState: Managed
+      managementState: Removed
       registriesNamespace: rhoai-model-registries
     ray:
-      managementState: Managed
-    trainingoperator:
-      managementState: Managed
+      managementState: Removed
+    trainingoperator: {}
     trustyai:
       eval:
         lmeval:
           permitCodeExecution: deny
           permitOnline: deny
-      managementState: Managed
+      managementState: Removed
     workbenches:
       managementState: Managed
       workbenchNamespace: rhods-notebooks

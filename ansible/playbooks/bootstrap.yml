@@ -46,10 +46,30 @@
       tags: always
 
     # -------------------------------------------------------------------------
-    # Install OpenShift GitOps operator
-    # Uses a dedicated namespace (openshift-gitops-operator), not the shared
-    # openshift-operators namespace which already has its own global OperatorGroup.
+    # Install OpenShift GitOps operator (skipped if already present)
+    #
+    # Some clusters (e.g. RHDP GPU sandboxes) ship with GitOps pre-installed
+    # in openshift-operators. Installing a second subscription would create a
+    # duplicate operator instance. The tasks below detect this and skip
+    # installation, proceeding directly to the ArgoCD readiness wait.
     # -------------------------------------------------------------------------
+    - name: Check if GitOps operator is already installed
+      kubernetes.core.k8s_info:
+        host: "{{ ocp_api_url }}"
+        api_key: "{{ k8s_api_key }}"
+        validate_certs: false
+        api_version: operators.coreos.com/v1alpha1
+        kind: Subscription
+        name: openshift-gitops-operator
+        namespace: openshift-operators
+      register: existing_gitops_sub
+      tags: gitops
+
+    - name: Set fact — GitOps already installed
+      ansible.builtin.set_fact:
+        gitops_already_installed: "{{ existing_gitops_sub.resources | length > 0 }}"
+      tags: gitops
+
     - name: Create operator and operand namespaces
       kubernetes.core.k8s:
         host: "{{ ocp_api_url }}"
@@ -64,6 +84,7 @@
       loop:
         - "{{ gitops_operator_namespace }}"
         - "{{ gitops_argocd_namespace }}"
+      when: not gitops_already_installed
       tags: gitops
 
     - name: Create OperatorGroup in openshift-gitops-operator namespace
@@ -78,6 +99,7 @@
           metadata:
             name: openshift-gitops-operator
             namespace: "{{ gitops_operator_namespace }}"
+      when: not gitops_already_installed
       tags: gitops
 
     - name: Subscribe to OpenShift GitOps operator
@@ -98,6 +120,7 @@
             name: "{{ gitops_operator_name }}"
             source: redhat-operators
             sourceNamespace: openshift-marketplace
+      when: not gitops_already_installed
       tags: gitops
 
     - name: Wait for ArgoCD default instance to be ready
