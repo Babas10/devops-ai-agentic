@@ -10,9 +10,10 @@
 # multi-minute cold starts on every idle period. RawDeployment keeps the
 # pod always running with minReplicas: 1.
 #
-# Model: Qwen2.5-1.5B-Instruct pulled from HuggingFace Hub by the
-# KServe storage initializer on pod startup (~2-3 min first boot).
-# Subsequent starts use the cached download in /mnt/models.
+# Model: vLLM downloads Qwen2.5-1.5B-Instruct directly from HuggingFace Hub
+# on pod startup using HUGGING_FACE_HUB_TOKEN (~2-3 min first boot).
+# No storageUri — KServe's storage initializer is bypassed because hf://
+# is not a supported storage type in this KServe version (s3/hdfs/webhdfs only).
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
@@ -27,11 +28,6 @@ spec:
       modelFormat:
         name: vLLM
       runtime: vllm-cpu
-      storageUri: hf://Qwen/Qwen2.5-1.5B-Instruct
-      storage:
-        # References the HuggingFace token secret for the storage initializer
-        # to authenticate when downloading the model.
-        key: hf-token
       resources:
         requests:
           cpu: "2"
