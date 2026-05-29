@@ -1,0 +1,16 @@
+---
+# Persistent storage for Ollama model weights.
+# Qwen2.5:1.5b (Q4_K_M) is ~1.1 GiB — 10 Gi provides headroom for
+# additional models if needed.
+# ReadWriteOnce is sufficient: Ollama runs as a single replica.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-models
+  namespace: ai-agentic
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

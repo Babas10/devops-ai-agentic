@@ -1,0 +1,95 @@
+---
+# Ollama LLM server — CPU inference on amd64.
+#
+# Why Ollama instead of RHOAI vLLM:
+#   - RHOAI's vLLM CPU image only supports ppc64le/s390x (no amd64 build)
+#   - RHOAI's vLLM CUDA image requires GPU and cannot fall back to CPU
+#   - Ollama's official image supports amd64 CPU natively
+#
+# Model: qwen2.5:1.5b (Q4_K_M quantized, ~1.1 GiB)
+#   Pulled from Ollama registry on first startup and cached in the PVC.
+#   Subsequent restarts skip the download.
+#
+# API: OpenAI-compatible at http://ollama.ai-agentic.svc:11434
+#   POST /v1/chat/completions  (streaming supported via SSE)
+#   POST /api/chat             (Ollama native)
+#
+# Sizing (CPU-only):
+#   requests: 2 CPU / 4 GiB   — minimum for interactive response times
+#   limits:   8 CPU / 8 GiB   — burst headroom; model fits in ~2 GiB RAM
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: ai-agentic
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      serviceAccountName: ollama
+      containers:
+        - name: ollama
+          image: docker.io/ollama/ollama:latest
+          # Start the server, wait for it to be ready, pull the model, then
+          # keep the server running. The model is cached in the PVC so the
+          # pull is a no-op on subsequent pod starts.
+          command:
+            - /bin/bash
+            - -c
+            - |
+              ollama serve &
+              until curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; do
+                echo "Waiting for ollama server to start..."
+                sleep 2
+              done
+              echo "Pulling qwen2.5:1.5b..."
+              ollama pull qwen2.5:1.5b
+              echo "Model ready."
+              wait
+          env:
+            - name: OLLAMA_MODELS
+              value: /models        # store models in the PVC mount
+            - name: OLLAMA_HOST
+              value: 0.0.0.0:11434  # listen on all interfaces
+          ports:
+            - name: http
+              containerPort: 11434
+              protocol: TCP
+          volumeMounts:
+            - name: models
+              mountPath: /models
+          # Server is ready only after the model pull completes.
+          # failureThreshold * periodSeconds = 10 min window for first pull.
+          readinessProbe:
+            exec:
+              command:
+                - /bin/bash
+                - -c
+                - ollama list | grep -q qwen2.5
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 40
+          livenessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: "2"
+              memory: 4Gi
+            limits:
+              cpu: "8"
+              memory: 8Gi
+      volumes:
+        - name: models
+          persistentVolumeClaim:
+            claimName: ollama-models

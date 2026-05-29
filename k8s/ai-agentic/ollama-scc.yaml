@@ -1,0 +1,17 @@
+---
+# Grant the ollama ServiceAccount the anyuid SCC.
+# Ollama's official image runs as root (UID 0). OpenShift's default
+# restricted SCC blocks this. anyuid allows the container to run as
+# its declared UID without restriction.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ai-agentic-ollama-anyuid
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:openshift:scc:anyuid
+subjects:
+  - kind: ServiceAccount
+    name: ollama
+    namespace: ai-agentic

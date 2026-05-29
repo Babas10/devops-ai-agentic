@@ -154,6 +154,32 @@ env:
 
 ---
 
+## RHOAI vLLM CPU runtime — amd64 not supported (use Ollama instead)
+
+The `vLLM CPU ServingRuntime for KServe` template in RHOAI 2.25.x is **ppc64le/s390x only**. There is no amd64 (x86_64) CPU build.
+
+The `odh-vllm-cuda-rhel9` image has an amd64 build but is a CUDA-compiled vLLM. Its `cpu_platform_plugin()` only activates when:
+- The vLLM version string contains `"cpu"` (CPU builds), or
+- The host OS is macOS
+
+On the CUDA build with `CUDA_VISIBLE_DEVICES=""`, no platform is detected and vLLM crashes during dataclass initialisation — **before** `--device=cpu` args are even parsed. `VLLM_DEVICE_TYPE` and `VLLM_TARGET_DEVICE` env vars do not help; they are not read by the platform detection logic.
+
+Summary of RHOAI 2.25.x LLM serving options on amd64 CPU:
+
+| Option | amd64 | LLM / OpenAI API |
+|--------|-------|-----------------|
+| `odh-vllm-cuda-rhel9` | pulls | crashes — CUDA build, no CPU fallback |
+| `odh-vllm-cpu-rhel9` | no amd64 build | n/a |
+| `odh-openvino-model-server-rhel9` | runs | predictive only (KServe v2 protocol) |
+
+**Solution for CPU LLM serving on amd64: use Ollama**
+
+`docker.io/ollama/ollama` supports amd64 CPU natively, provides an OpenAI-compatible REST API (`/v1/chat/completions` with streaming), and is deployed as a plain Kubernetes `Deployment` (no KServe required).
+
+OpenShift note: Ollama runs as root — grant `anyuid` SCC to the pod's `ServiceAccount` via `ClusterRoleBinding` to `system:openshift:scc:anyuid`.
+
+---
+
 ## Bitnami Sealed Secrets chart — OpenShift SCC incompatibility
 
 The upstream Bitnami Sealed Secrets Helm chart hardcodes `runAsUser: 1001` and `fsGroup: 65534` in both `podSecurityContext` and `containerSecurityContext`. OpenShift's restricted SCC rejects pods with hardcoded UIDs/GIDs.
