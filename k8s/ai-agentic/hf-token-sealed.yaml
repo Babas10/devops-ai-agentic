@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: hf-token
+  namespace: ai-agentic
+spec:
+  encryptedData:
+    token: AgCx3fa5Zlk//yAErb80YB8gWgCNEniNLgoxT45k2z+yaE9MZ8LHDHuAM6tInqhHUIfn4UtLKVd//n6YRxIJ23TFuergI4jBDhL18Wc3PmJ6LoHu/vhfE3D9mRoCvieUtd6iWcbZwkaqtbPAKu7Ivjp9v32YKh4TUrSaTgyah1XPrc/9hCwGl/I7E36jOWgCIYgXi8fW57IYqUq0sg9QolvThQDIi6bACL97exisuwaXFwY9ILVLTl4ZLq7zrFQyInTgfPrJeI39jhv383Hp8D8RXXISpM0x4vne4gklkOx/nknGj5YS+KFEtAwjhTuxxiBe7CAqz4kk1I5dTeiSqV82/B0fH4yPfntAXsZYV+Scw6mREzATky8BhLAbAyrz1FZ+Y3CO0G1oCsNjcjYYMBxYV8y2smk6VavyzhL6RIgzdu9ngiN5sVyZzf4nVE/2c/Llw1wgfPsP4IACc7e0tDM+VFzEKumUkW9P7PkUY5gEG2IAx8Vo0QCPT22TCAifmj+70BY3qD8PurdFDNIagok51DwaZB7NFlgPygY9/vtyqZ28bHrEUOda08jOIveS3XAkaT7lirrxoHAT7XXuAUL4vpoCamGItH1nzZC5f9m+0+YzsAJ83OllcXeFATShZ0OglyxGHFhu2qLWrZCXF+JHVrshdJ9fk8MwPHwAMssmCoNF2JJ+PJIPx4psPNMKnoa9yojUtUDVWPwxGmoAbN/1NR10IcKNiiFN0CFAapmLydqPBy7f
+  template:
+    metadata:
+      name: hf-token
+      namespace: ai-agentic
