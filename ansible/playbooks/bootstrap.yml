@@ -1,11 +1,16 @@
 ---
 # Bootstrap playbook — installs OpenShift GitOps operator, then hands off to ArgoCD.
 #
-# Usage:
+# Usage — password auth (standard RHDP sandboxes):
 #   ansible-playbook ansible/playbooks/bootstrap.yml \
 #     -e ocp_api_url=$OCP_API \
 #     -e ocp_username=$OCP_USER \
 #     -e ocp_password=$OCP_PASS
+#
+# Usage — pre-existing token (GPU clusters, CI, or when OAuth flow fails):
+#   ansible-playbook ansible/playbooks/bootstrap.yml \
+#     -e ocp_api_url=$OCP_API \
+#     -e ocp_token=$(oc whoami --show-token)
 #
 - name: Bootstrap OpenShift cluster
   hosts: localhost
@@ -30,14 +35,16 @@
     ocp_api_url: "{{ lookup('env', 'OCP_API') }}"
     ocp_username: "{{ lookup('env', 'OCP_USER') }}"
     ocp_password: "{{ lookup('env', 'OCP_PASS') }}"
-    # Derive OAuth server URL from API URL:
-    # https://api.ocp.<id>.sandbox<n>.opentlc.com:6443
-    # -> https://oauth-openshift.apps.ocp.<id>.sandbox<n>.opentlc.com
+    # Optional: pass a pre-existing token to skip the OAuth flow entirely.
+    # Useful for GPU clusters or any case where OAuth auth fails.
+    # Get from: oc whoami --show-token
+    ocp_token: ""
+    # Derive OAuth server URL from API URL
     ocp_oauth_url: "{{ ocp_api_url | regex_replace('https://api\\.(.+?):\\d+$', 'https://oauth-openshift.apps.\\1') }}"
 
   tasks:
     # -------------------------------------------------------------------------
-    # Authenticate via OpenShift OAuth server
+    # Authenticate — OAuth flow or pre-existing token
     # -------------------------------------------------------------------------
     - name: Request OpenShift OAuth token
       ansible.builtin.uri:
@@ -52,11 +59,19 @@
           X-CSRF-Token: "1"
         status_code: [302]
       register: oauth_response
+      when: ocp_token == ""
       tags: always
 
-    - name: Extract access token from OAuth redirect
+    - name: Set token from OAuth redirect
       ansible.builtin.set_fact:
         k8s_api_key: "{{ oauth_response.location | regex_search('access_token=([^&]+)', '\\1') | first }}"
+      when: ocp_token == ""
+      tags: always
+
+    - name: Set token from provided ocp_token
+      ansible.builtin.set_fact:
+        k8s_api_key: "{{ ocp_token }}"
+      when: ocp_token != ""
       tags: always
 
     # -------------------------------------------------------------------------
@@ -250,5 +265,5 @@
         headers:
           Authorization: "Bearer {{ k8s_api_key }}"
         status_code: [200, 201, 204, 404]
-      when: k8s_api_key is defined
+      when: k8s_api_key is defined and ocp_token == ""
       tags: always
