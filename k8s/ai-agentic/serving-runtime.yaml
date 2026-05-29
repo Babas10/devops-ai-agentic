@@ -48,6 +48,8 @@ spec:
       env:
         - name: CUDA_VISIBLE_DEVICES
           value: ""          # disables CUDA — forces CPU-only execution
+        - name: VLLM_DEVICE_TYPE
+          value: cpu         # explicit device type — required when CUDA is hidden
         - name: HF_HOME
           value: /tmp/hf_home
         - name: HUGGING_FACE_HUB_TOKEN

@@ -135,6 +135,23 @@ args:
 
 `CUDA_VISIBLE_DEVICES: ""` tells PyTorch/vLLM there are no CUDA devices, preventing any CUDA initialisation errors while the CUDA libraries remain unused.
 
+However, newer vLLM versions (as shipped in `odh-vllm-cuda-rhel9`) fail to infer the device type when CUDA is hidden and no explicit device type env var is set:
+
+```
+RuntimeError: Failed to infer device type, please set the environment variable
+`VLLM_LOGGING_LEVEL=DEBUG` to turn on verbose logging to help debug the issue.
+```
+
+This crash happens during argument parsing — before `--device=cpu` is even read. **Fix:** also set `VLLM_DEVICE_TYPE=cpu`:
+
+```yaml
+env:
+  - name: CUDA_VISIBLE_DEVICES
+    value: ""
+  - name: VLLM_DEVICE_TYPE
+    value: cpu
+```
+
 ---
 
 ## Bitnami Sealed Secrets chart — OpenShift SCC incompatibility
