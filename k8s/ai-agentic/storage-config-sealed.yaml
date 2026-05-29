@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: storage-config
+  namespace: ai-agentic
+spec:
+  encryptedData:
+    hf-token: AgBKLSjlNrxCdX+BJbD7ok/h2iApH6pcq6NfrciZiAwUl7h40l2nSPpJ72E96BlnOazNCDaKeMAc2e6mjBO/PA36WXuNGxCYPEYLiaEU97u0U01orrd87Vxs9E5fQfDJyq3N22plg3x/ptkgaPSWQYWaRXw09m/xeYa8QImaiGWhi5zR5j0vdgUoaoTDgPG6Rocc1y+DZ3xW8n14GUZd0Y0t5pIN0bRYV8gWvtqiiYBwChZo61Aw1DoVXkKkadKX/PUNFPgCDLYJywocYTa0JZlieMC5qsKdX4Xqbt/DrTP+cnTWZ7HBzFIWBWFbSSDvAP3TzON+aFGwNTc+3a34oCtMpapTjRtF7gQNz716Hc9omhUgfcj4egP+J1zCktl1cRL1MVksFK05jeH4CRXGFXTRjmvdWPY5J3TYspWmTrh5u94gymoRzXhWgFmdMb80wpsM2FzPL2HPn9DFmi/4uG9jfyAQGw57SF91kZ71mZvQrErPCECMpkbUoirVv0l21Mfah2kLBt5gxBPxglPbAYRaPm0w3l+RP639UjU7Qk8VZQp7GLJCHuKwSEncsJlHfucyOZlFu53VVVtxcZpbdRu0LynFC485YkUpWmNZHVtP3+PQ7oMYHmz6QGhyypAOQW45fozePPgKdN9RIaixC3hlc6GcmKW6+LjS/zFkkkvVKwfJvZr417Bln6ZKrEl+K7vH6NBwM+vu/xwKtxXqhvEyBZ8n/TEkx809YzylA2cF5u27v+ZnnhVydSuXFObBR4jKUx1LK7KS2XqvwQhPUyxuZsshiu6RNi3g
+  template:
+    metadata:
+      name: storage-config
+      namespace: ai-agentic
