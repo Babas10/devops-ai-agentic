@@ -11,7 +11,7 @@ spec:
   source:
     repoURL: https://github.com/Babas10/devops-ai-agentic
     targetRevision: main
-    path: k8s/ai-agentic
+    path: k8s/ai-agentic/gpu
   destination:
     server: https://kubernetes.default.svc
     namespace: ai-agentic

@@ -1,0 +1,33 @@
+---
+# App of Apps — CPU profile.
+# Use this on clusters without GPU (standard RHDP sandbox, dev laptops, etc.).
+#
+# Deploys in sync-wave order:
+#   Wave 1: Sealed Secrets
+#   Wave 2: RHOAI operator + DataScienceCluster (no KServe Serverless — no Service Mesh needed)
+#   Wave 3: AI agentic app (Ollama CPU serving + Workbench)
+#
+# No Service Mesh or Serverless — KServe Knative serving is disabled in the CPU DSC.
+#
+# Apply with:
+#   ansible-playbook ansible/playbooks/bootstrap.yml ... (select 'cpu' at prompt)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Babas10/devops-ai-agentic
+    targetRevision: main
+    path: k8s/apps/cpu
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-gitops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
