@@ -1,0 +1,41 @@
+---
+# KServe InferenceService — Qwen2.5-1.5B-Instruct via vLLM CPU runtime.
+#
+# Prerequisites:
+#   - ServingRuntime 'vllm-cpu' must exist in this namespace
+#   - Secret 'hf-token' must exist in this namespace (see hf-token-sealed.yaml)
+#
+# Deployment mode: RawDeployment (standard K8s Deployment, no Knative).
+# Rationale: CPU inference is slow — Knative scale-to-zero would cause
+# multi-minute cold starts on every idle period. RawDeployment keeps the
+# pod always running with minReplicas: 1.
+#
+# Model: Qwen2.5-1.5B-Instruct pulled from HuggingFace Hub by the
+# KServe storage initializer on pod startup (~2-3 min first boot).
+# Subsequent starts use the cached download in /mnt/models.
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen
+  namespace: ai-agentic
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+spec:
+  predictor:
+    minReplicas: 1
+    model:
+      modelFormat:
+        name: vLLM
+      runtime: vllm-cpu
+      storageUri: hf://Qwen/Qwen2.5-1.5B-Instruct
+      storage:
+        # References the HuggingFace token secret for the storage initializer
+        # to authenticate when downloading the model.
+        key: hf-token
+      resources:
+        requests:
+          cpu: "2"
+          memory: 6Gi
+        limits:
+          cpu: "8"
+          memory: 12Gi

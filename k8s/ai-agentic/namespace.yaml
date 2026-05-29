@@ -1,0 +1,10 @@
+---
+# DataScienceProject — a regular namespace with the RHOAI dashboard label.
+# RHOAI picks it up automatically and shows it in the dashboard UI.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-agentic
+  labels:
+    opendatahub.io/dashboard: "true"
+    kubernetes.io/metadata.name: ai-agentic
