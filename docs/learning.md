@@ -66,38 +66,50 @@ The controller generates a new signing key on first start if none exists. To reu
 
 ---
 
-## KServe storage credentials — two separate secrets required
+## KServe storage initializer — HuggingFace Hub not supported in RHOAI 2.25.x
 
-When using `storageUri: hf://...` in an InferenceService, KServe has two distinct credential surfaces that must both be satisfied:
+### What doesn't work
 
-| Secret | Name | Purpose |
-|---|---|---|
-| `storage-config` | **must be exactly this name** | Read by the KServe admission webhook at pod creation time and by the storage initializer to authenticate the model download |
-| Any name (e.g. `hf-token`) | Optional but recommended | Injected as `HUGGING_FACE_HUB_TOKEN` env var into the vLLM container for runtime HF Hub calls |
+`storageUri: hf://...` is rejected by the KServe admission webhook in RHOAI 2.25.x:
 
-If `storage-config` is missing the admission webhook rejects the pod before it starts:
 ```
 admission webhook "inferenceservice.kserve-webhook-server.pod-mutator" denied the request:
-can't read storage secret storage-config: secrets "storage-config" not found
+storage type must be one of [s3, hdfs, webhdfs]. storage type [huggingface] is not supported
 ```
 
-### Format of `storage-config`
+Even if a `storage-config` Secret is present with `"type": "huggingface"`, the webhook rejects it because `huggingface` is not in the supported type list for this KServe version.
 
-The Secret contains one JSON key per storage backend. The key name must match `spec.predictor.model.storage.key` in the InferenceService:
+### Correct approach — let vLLM download the model directly
+
+Skip the KServe storage initializer entirely. Set the HuggingFace model ID directly in the ServingRuntime args and pass the token as an env var. vLLM handles the download on pod startup:
 
 ```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: storage-config        # must be this exact name
-  namespace: <isvc-namespace>
-type: Opaque
-stringData:
-  hf-token: |                 # matches storage.key: hf-token in InferenceService
-    {"type":"huggingface","HF_TOKEN":"<token>"}
+# ServingRuntime
+args:
+  - --model=Qwen/Qwen2.5-1.5B-Instruct   # HF model ID, not /mnt/models
+  - --device=cpu
+  - --dtype=bfloat16
+env:
+  - name: HUGGING_FACE_HUB_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: hf-token
+        key: token
+  - name: HF_HOME
+    value: /tmp/hf_home
+
+# InferenceService — no storageUri, no storage.key
+spec:
+  predictor:
+    model:
+      modelFormat:
+        name: vLLM
+      runtime: vllm-cpu
 ```
 
-Both secrets should be committed as SealedSecrets so they are automatically restored on cluster reinstall.
+The `storage-config` Secret is **not needed** with this approach. Only the `hf-token` SealedSecret is required (for the env var).
+
+First pod startup takes ~2-3 minutes while vLLM downloads the model into `HF_HOME`. The cache is in `/tmp/hf_home` (emptyDir) so the download repeats on pod restart.
 
 ---
 
