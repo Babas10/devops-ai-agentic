@@ -66,6 +66,41 @@ The controller generates a new signing key on first start if none exists. To reu
 
 ---
 
+## KServe storage credentials — two separate secrets required
+
+When using `storageUri: hf://...` in an InferenceService, KServe has two distinct credential surfaces that must both be satisfied:
+
+| Secret | Name | Purpose |
+|---|---|---|
+| `storage-config` | **must be exactly this name** | Read by the KServe admission webhook at pod creation time and by the storage initializer to authenticate the model download |
+| Any name (e.g. `hf-token`) | Optional but recommended | Injected as `HUGGING_FACE_HUB_TOKEN` env var into the vLLM container for runtime HF Hub calls |
+
+If `storage-config` is missing the admission webhook rejects the pod before it starts:
+```
+admission webhook "inferenceservice.kserve-webhook-server.pod-mutator" denied the request:
+can't read storage secret storage-config: secrets "storage-config" not found
+```
+
+### Format of `storage-config`
+
+The Secret contains one JSON key per storage backend. The key name must match `spec.predictor.model.storage.key` in the InferenceService:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: storage-config        # must be this exact name
+  namespace: <isvc-namespace>
+type: Opaque
+stringData:
+  hf-token: |                 # matches storage.key: hf-token in InferenceService
+    {"type":"huggingface","HF_TOKEN":"<token>"}
+```
+
+Both secrets should be committed as SealedSecrets so they are automatically restored on cluster reinstall.
+
+---
+
 ## Bitnami Sealed Secrets chart — OpenShift SCC incompatibility
 
 The upstream Bitnami Sealed Secrets Helm chart hardcodes `runAsUser: 1001` and `fsGroup: 65534` in both `podSecurityContext` and `containerSecurityContext`. OpenShift's restricted SCC rejects pods with hardcoded UIDs/GIDs.
