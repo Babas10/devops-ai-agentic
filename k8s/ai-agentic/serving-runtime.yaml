@@ -1,0 +1,65 @@
+---
+# vLLM GPU ServingRuntime for Qwen2.5-7B-Instruct on NVIDIA L4.
+#
+# Image: odh-vllm-cuda-rhel9 (amd64) — the only RHOAI vLLM image with an
+# amd64 build. Runs in GPU mode when CUDA_VISIBLE_DEVICES is not overridden.
+#
+# GPU: NVIDIA L4 — 23 GiB VRAM, compute 8.9 (Ada Lovelace), CUDA 12.4.
+#
+# Sizing rationale:
+#   - Model weights (bfloat16, 7B): ~14 GiB
+#   - KV cache + vLLM overhead:     ~4 GiB
+#   - Total VRAM:                   ~18 GiB (fits comfortably in 23 GiB L4)
+#   - max-model-len: 8192           — full context window
+#   - max-num-seqs: 16              — GPU handles higher concurrency than CPU
+#
+# See docs/sizing.md for the full sizing methodology.
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: vllm-gpu
+  namespace: ai-agentic
+spec:
+  supportedModelFormats:
+    - name: vLLM
+      version: "1"
+      autoSelect: true
+  multiModel: false
+  containers:
+    - name: kserve-container
+      image: registry.redhat.io/rhoai/odh-vllm-cuda-rhel9@sha256:9302ffc252b8681317b4d40ce8b4e66a5db3511f08f6a1ff6d34e595023f85c5
+      command:
+        - python
+        - -m
+        - vllm.entrypoints.openai.api_server
+      args:
+        # vLLM downloads the model directly from HuggingFace Hub using the
+        # HUGGING_FACE_HUB_TOKEN env var. KServe's storage initializer is
+        # bypassed — hf:// storageUri is not supported in this KServe version.
+        - --model=Qwen/Qwen2.5-7B-Instruct
+        - --dtype=bfloat16
+        - --port=8080
+        - --served-model-name={{.Name}}
+        - --max-model-len=8192
+        - --max-num-seqs=16
+      env:
+        - name: HF_HOME
+          value: /tmp/hf_home
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token
+              key: token
+      ports:
+        - name: h2c
+          containerPort: 8080
+          protocol: TCP
+      resources:
+        requests:
+          cpu: "4"
+          memory: 16Gi
+          nvidia.com/gpu: "1"
+        limits:
+          cpu: "8"
+          memory: 24Gi
+          nvidia.com/gpu: "1"
