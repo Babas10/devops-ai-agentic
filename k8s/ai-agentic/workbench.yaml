@@ -1,0 +1,83 @@
+---
+# RHOAI Workbench — Jupyter notebook server for LangGraph agent development.
+#
+# Image: jupyter-datascience-cpu-py312-ubi9 (Python 3.12, data science libs)
+#   - CPU-only, amd64 — matches the cluster nodes
+#   - Pre-installed: numpy, pandas, matplotlib, scikit-learn, jupyter
+#   - Install LangGraph + agent deps via pip in the notebook
+#
+# RHOAI integration:
+#   - inject-oauth: "true" — RHOAI injects an OAuth proxy sidecar so the
+#     notebook is accessible via SSO through the RHOAI dashboard
+#   - last-image-selection / last-size-selection — dashboard display metadata
+#
+# Access: RHOAI dashboard → Data Science Projects → ai-agentic → Workbenches
+apiVersion: kubeflow.org/v1
+kind: Notebook
+metadata:
+  name: agent-workbench
+  namespace: ai-agentic
+  annotations:
+    notebooks.opendatahub.io/inject-oauth: "true"
+    notebooks.opendatahub.io/last-image-selection: "jupyter-datascience-cpu-py312-ubi9:2025.1"
+    notebooks.opendatahub.io/last-size-selection: "Small"
+  labels:
+    app: agent-workbench
+    opendatahub.io/dashboard: "true"
+    opendatahub.io/odh-managed: "true"
+spec:
+  template:
+    spec:
+      affinity: {}
+      enableServiceLinks: false
+      containers:
+        - name: agent-workbench
+          image: registry.redhat.io/rhoai/odh-workbench-jupyter-datascience-cpu-py312-rhel9@sha256:a5d7108d111dc43116245d1059bfcffea04640ba285e1cf2d411b633388845f9
+          imagePullPolicy: Always
+          env:
+            - name: NOTEBOOK_ARGS
+              value: |-
+                --ServerApp.port=8888
+                --ServerApp.token=''
+                --ServerApp.password=''
+                --ServerApp.base_url=/notebook/ai-agentic/agent-workbench
+                --ServerApp.quit_button=False
+            - name: JUPYTER_IMAGE
+              value: registry.redhat.io/rhoai/odh-workbench-jupyter-datascience-cpu-py312-rhel9@sha256:a5d7108d111dc43116245d1059bfcffea04640ba285e1cf2d411b633388845f9
+            # Ollama endpoint — reachable in-cluster from the notebook
+            - name: OLLAMA_BASE_URL
+              value: http://ollama.ai-agentic.svc:11434
+          ports:
+            - name: notebook-port
+              containerPort: 8888
+              protocol: TCP
+          resources:
+            requests:
+              cpu: "1"
+              memory: 4Gi
+            limits:
+              cpu: "2"
+              memory: 8Gi
+          livenessProbe:
+            httpGet:
+              path: /notebook/ai-agentic/agent-workbench/api
+              port: notebook-port
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /notebook/ai-agentic/agent-workbench/api
+              port: notebook-port
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: agent-workbench
+              mountPath: /opt/app-root/src
+      volumes:
+        - name: agent-workbench
+          persistentVolumeClaim:
+            claimName: agent-workbench

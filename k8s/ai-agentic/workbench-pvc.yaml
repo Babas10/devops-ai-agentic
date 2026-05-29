@@ -1,0 +1,17 @@
+---
+# PVC for the agent-workbench Jupyter notebook server.
+# Mounted at /opt/app-root/src — persists notebooks and pip-installed packages
+# across pod restarts.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-workbench
+  namespace: ai-agentic
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
