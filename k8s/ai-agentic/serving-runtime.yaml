@@ -1,0 +1,59 @@
+---
+# vLLM CPU ServingRuntime for Qwen2.5-1.5B-Instruct.
+# Uses the RHOAI-provided CPU vLLM image (no GPU required).
+#
+# Sizing rationale (CPU-only):
+#   - Model weights (bfloat16): ~3 GB
+#   - KV cache + vLLM overhead:  ~4 GB
+#   - Total memory limit:        12 Gi (with headroom)
+#   - CPU limit: 8 cores — optimal throughput for 1.5B on CPU (~8-15 tok/s)
+#
+# See docs/sizing.md for the full sizing methodology.
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: vllm-cpu
+  namespace: ai-agentic
+spec:
+  supportedModelFormats:
+    - name: vLLM
+      version: "1"
+      autoSelect: true
+  multiModel: false
+  containers:
+    - name: kserve-container
+      # RHOAI-provided CPU vLLM image (no CUDA dependency)
+      image: registry.redhat.io/rhoai/odh-vllm-cpu-rhel9@sha256:b1a4f15fcdba9bc27cdd9a7cd13c76334d83b4b35c02092e64a4ea22d673bc4c
+      command:
+        - python
+        - -m
+        - vllm.entrypoints.openai.api_server
+      args:
+        - --model=/mnt/models
+        - --dtype=bfloat16        # native CPU precision — no fp16 without AVX-512
+        - --device=cpu
+        - --port=8080
+        - --served-model-name={{.Name}}
+        - --max-model-len=4096   # context window — reduce if OOM
+        - --max-num-seqs=4       # concurrent sequences — keep low for CPU
+      env:
+        - name: HF_HOME
+          value: /tmp/hf_home
+        # Pass token through to vLLM in case it needs to fetch tokenizer files
+        - name: HUGGING_FACE_HUB_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: hf-token
+              key: token
+              optional: true
+      ports:
+        - name: h2c
+          containerPort: 8080
+          protocol: TCP
+      resources:
+        requests:
+          cpu: "2"
+          memory: 6Gi
+        limits:
+          cpu: "8"
+          memory: 12Gi
