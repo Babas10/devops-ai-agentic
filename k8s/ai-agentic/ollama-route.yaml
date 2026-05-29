@@ -1,0 +1,18 @@
+---
+# OpenShift Route — exposes the Ollama API externally over HTTPS.
+# Edge TLS termination: traffic is encrypted between client and router,
+# then plain HTTP between router and pod.
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: ollama
+  namespace: ai-agentic
+spec:
+  to:
+    kind: Service
+    name: ollama
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
