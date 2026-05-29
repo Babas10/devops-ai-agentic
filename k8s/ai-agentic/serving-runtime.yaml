@@ -1,6 +1,10 @@
 ---
 # vLLM CPU ServingRuntime for Qwen2.5-1.5B-Instruct.
-# Uses the RHOAI-provided CPU vLLM image (no GPU required).
+#
+# Image: odh-vllm-cuda-rhel9 (amd64) with --device=cpu and CUDA_VISIBLE_DEVICES=""
+# The odh-vllm-cpu-rhel9 image has no amd64 build (manifest list contains no
+# amd64 entry — only non-x86 architectures). The CUDA image supports amd64
+# and runs in CPU-only mode when CUDA_VISIBLE_DEVICES is empty.
 #
 # Sizing rationale (CPU-only):
 #   - Model weights (bfloat16): ~3 GB
@@ -22,8 +26,9 @@ spec:
   multiModel: false
   containers:
     - name: kserve-container
-      # RHOAI-provided CPU vLLM image (no CUDA dependency)
-      image: registry.redhat.io/rhoai/odh-vllm-cpu-rhel9@sha256:b1a4f15fcdba9bc27cdd9a7cd13c76334d83b4b35c02092e64a4ea22d673bc4c
+      # CUDA image used — it's the only RHOAI vLLM image with an amd64 build.
+      # CUDA_VISIBLE_DEVICES="" + --device=cpu forces CPU-only mode.
+      image: registry.redhat.io/rhoai/odh-vllm-cuda-rhel9@sha256:9302ffc252b8681317b4d40ce8b4e66a5db3511f08f6a1ff6d34e595023f85c5
       command:
         - python
         - -m
@@ -41,6 +46,8 @@ spec:
         - --max-model-len=4096   # context window — reduce if OOM
         - --max-num-seqs=4       # concurrent sequences — keep low for CPU
       env:
+        - name: CUDA_VISIBLE_DEVICES
+          value: ""          # disables CUDA — forces CPU-only execution
         - name: HF_HOME
           value: /tmp/hf_home
         - name: HUGGING_FACE_HUB_TOKEN
