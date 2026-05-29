@@ -4,6 +4,8 @@ kind: Application
 metadata:
   name: ai-agentic
   namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
 spec:
   project: default
   source:
@@ -20,3 +22,9 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ServerSideApply=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

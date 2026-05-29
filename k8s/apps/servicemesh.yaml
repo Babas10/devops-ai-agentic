@@ -4,6 +4,8 @@ kind: Application
 metadata:
   name: servicemesh
   namespace: openshift-gitops
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   project: default
   source:
