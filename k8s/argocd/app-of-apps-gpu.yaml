@@ -1,0 +1,32 @@
+---
+# App of Apps — GPU profile.
+# Use this on clusters with an NVIDIA GPU node (e.g. RHDP GPU sandboxes).
+#
+# Deploys in sync-wave order:
+#   Wave 1: Sealed Secrets
+#   Wave 2: Service Mesh + Serverless  (required by KServe Serverless mode)
+#   Wave 3: RHOAI operator + DataScienceCluster
+#   Wave 4: AI agentic app (KServe ServingRuntime + InferenceService + Workbench)
+#
+# Apply with:
+#   ansible-playbook ansible/playbooks/bootstrap.yml ... (select 'gpu' at prompt)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: app-of-apps
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/Babas10/devops-ai-agentic
+    targetRevision: main
+    path: k8s/apps/gpu
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: openshift-gitops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
