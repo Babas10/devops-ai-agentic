@@ -113,6 +113,30 @@ First pod startup takes ~2-3 minutes while vLLM downloads the model into `HF_HOM
 
 ---
 
+## RHOAI vLLM CPU image has no amd64 build
+
+`odh-vllm-cpu-rhel9` does not include an amd64 (x86_64) entry in its manifest list. On standard AWS `m6a`/`m5a` nodes the pod fails with:
+
+```
+no image found in manifest list for architecture "amd64"
+```
+
+**Workaround:** use `odh-vllm-cuda-rhel9` (which does have an amd64 build) with CPU-only mode forced via env var:
+
+```yaml
+image: registry.redhat.io/rhoai/odh-vllm-cuda-rhel9@sha256:...
+env:
+  - name: CUDA_VISIBLE_DEVICES
+    value: ""        # hides all GPUs — vLLM falls back to CPU
+args:
+  - --device=cpu
+  - --dtype=bfloat16
+```
+
+`CUDA_VISIBLE_DEVICES: ""` tells PyTorch/vLLM there are no CUDA devices, preventing any CUDA initialisation errors while the CUDA libraries remain unused.
+
+---
+
 ## Bitnami Sealed Secrets chart — OpenShift SCC incompatibility
 
 The upstream Bitnami Sealed Secrets Helm chart hardcodes `runAsUser: 1001` and `fsGroup: 65534` in both `podSecurityContext` and `containerSecurityContext`. OpenShift's restricted SCC rejects pods with hardcoded UIDs/GIDs.
