@@ -56,6 +56,9 @@ spec:
         - name: h2c
           containerPort: 8080
           protocol: TCP
+      volumeMounts:
+        - name: model-cache
+          mountPath: /tmp/hf_home
       resources:
         requests:
           cpu: "2"
@@ -65,3 +68,7 @@ spec:
           cpu: "4"
           memory: 14Gi
           nvidia.com/gpu: "1"
+  volumes:
+    - name: model-cache
+      persistentVolumeClaim:
+        claimName: qwen-model-cache

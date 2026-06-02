@@ -305,6 +305,57 @@ entirely on the GPU device.
 
 ---
 
+## Model cache persistence — PVC for HuggingFace download
+
+Without a PVC, vLLM downloads model weights into an `emptyDir` (`HF_HOME=/tmp/hf_home`).
+Every pod restart (node reboot, OOM, scaling event) re-downloads the full model (~14 GiB for Qwen2.5-7B-Instruct), adding 5-10 minutes of cold start.
+
+**Fix:** mount a `PersistentVolumeClaim` at `HF_HOME`.
+
+KServe `ServingRuntime` supports `spec.volumes` and container `volumeMounts` directly:
+
+```yaml
+# serving-runtime.yaml
+spec:
+  containers:
+    - name: kserve-container
+      volumeMounts:
+        - name: model-cache
+          mountPath: /tmp/hf_home
+  volumes:
+    - name: model-cache
+      persistentVolumeClaim:
+        claimName: qwen-model-cache
+```
+
+```yaml
+# qwen-model-cache-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qwen-model-cache
+  namespace: ai-agentic
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi  # 14 GiB weights + HF cache overhead
+```
+
+**S3 for model storage** — free tier comparison:
+
+| Provider | Free tier | S3-compatible | Enough for 14 GiB | Notes |
+|----------|-----------|---------------|-------------------|-------|
+| Cloudflare R2 | 10 GiB storage, 0 egress | Yes (S3 API) | No (14 GiB > 10 GiB) | No egress fees |
+| Backblaze B2 | 10 GiB storage | Yes | No | Egress charges apply |
+| Oracle Cloud | 20 GiB object storage | Partial (OCI API, S3 compat mode) | Yes | Requires S3 compat mode enabled |
+| MinIO on-cluster | Unlimited (uses cluster PVC) | Yes | Yes | Self-hosted; backed by cluster storage |
+
+For this project (ephemeral RHDP clusters), a PVC is the simplest approach — S3 makes sense only when reusing a model across cluster reinstalls. MinIO would require a dedicated PVC and MinIO deployment.
+
+---
+
 ## Bitnami Sealed Secrets chart — OpenShift SCC incompatibility
 
 The upstream Bitnami Sealed Secrets Helm chart hardcodes `runAsUser: 1001` and `fsGroup: 65534` in both `podSecurityContext` and `containerSecurityContext`. OpenShift's restricted SCC rejects pods with hardcoded UIDs/GIDs.
