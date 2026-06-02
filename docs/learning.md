@@ -66,6 +66,60 @@ The controller generates a new signing key on first start if none exists. To reu
 
 ---
 
+## odh-vllm-cuda-rhel9 ships with HF_HUB_OFFLINE=1
+
+The `odh-vllm-cuda-rhel9` image is designed for air-gapped environments where models are
+pre-cached. It sets `HF_HUB_OFFLINE=1` in its default environment, which tells
+`huggingface_hub` to never make outbound requests.
+
+### The misleading error
+
+vLLM crashes at startup with a confusing message:
+
+```
+OSError: We couldn't connect to 'https://huggingface.co' to load the files,
+and couldn't find them in the cached files.
+```
+
+This looks like a network error. The real cause is buried in the chained exception:
+
+```
+LocalEntryNotFoundError: Cannot find the requested files in the disk cache
+and outgoing traffic has been disabled.
+To enable hf.co look-ups and downloads online, set 'local_files_only' to False.
+```
+
+The network is perfectly reachable — `HF_HUB_OFFLINE=1` silently blocks all
+`huggingface_hub` downloads before any network call is even attempted.
+
+### How to diagnose
+
+Create a debug pod using the exact image and run:
+
+```bash
+oc exec -n ai-agentic vllm-debug -- env | grep -iE "offline|HF_HUB"
+# HF_HUB_OFFLINE=1
+```
+
+### Fix
+
+Override the image default in the `ServingRuntime` env:
+
+```yaml
+env:
+  - name: HF_HUB_OFFLINE
+    value: "0"
+```
+
+### First-start download time
+
+With `HF_HUB_OFFLINE=0` and `HF_HOME` pointing to an `emptyDir`, the model is downloaded
+from HuggingFace on every pod start. For Qwen2.5-7B-Instruct (~14 GiB) this takes several
+minutes. To avoid repeated downloads, mount a PVC at `HF_HOME` so the cache persists across
+pod restarts.
+
+---
+
 ## KServe storage initializer — HuggingFace Hub not supported in RHOAI 2.25.x
 
 ### What doesn't work
