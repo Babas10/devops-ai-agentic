@@ -180,6 +180,77 @@ OpenShift note: Ollama runs as root — grant `anyuid` SCC to the pod's `Service
 
 ---
 
+## GPU scheduling — taints, tolerations and resource sizing
+
+### Taints and tolerations
+
+A **taint** on a node repels all pods unless they explicitly tolerate it. GPU nodes are tainted
+to prevent non-GPU workloads from landing on expensive GPU capacity.
+
+To schedule a pod on a GPU node you need **both**:
+
+| Requirement | What it does |
+|-------------|-------------|
+| Resource request `nvidia.com/gpu: "1"` | Reserves one GPU for the pod; enforces exclusive access |
+| Toleration for `nvidia.com/gpu: True` | Allows the pod past the taint gate |
+
+Missing either one leaves the pod `Pending`. The typical scheduler messages are:
+- `had untolerated taint {nvidia.com/gpu: True}` → toleration missing
+- `Insufficient nvidia.com/gpu` → GPU already claimed by another pod
+
+For KServe `InferenceService`, tolerations go under `spec.predictor`:
+
+```yaml
+spec:
+  predictor:
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+```
+
+### GPU sharing
+
+By default, Kubernetes treats GPUs as **non-shareable** — a request for `nvidia.com/gpu: "1"`
+grants a pod exclusive access to the entire physical GPU. Other pods cannot use it even if
+utilisation is low.
+
+Options to share a GPU across multiple pods:
+
+| Method | Isolation | Works on L4 | Notes |
+|--------|-----------|-------------|-------|
+| **MIG** (Multi-Instance GPU) | Strong (hardware) | ❌ L4 not supported | Requires A100/H100 |
+| **Time-slicing** | None (memory shared) | ✅ | Configured via GPU operator ConfigMap; performance degrades under contention |
+| **MPS** (Multi-Process Service) | Partial | ✅ | Better utilisation than time-slicing, still no memory isolation |
+
+For this project (Qwen2.5-7B-Instruct using ~14–18 GiB of the L4's 23 GiB VRAM), there is
+no meaningful headroom for sharing — the GPU is essentially full with a single model loaded.
+
+### CPU/RAM sizing on small GPU nodes
+
+RHDP GPU sandbox nodes are typically small (e.g. 3.5 allocatable CPU, ~14 Gi allocatable RAM).
+vLLM inference is **GPU-bound** — actual CPU and RAM usage is low. Default sizing templates
+often request 4 CPU / 16 Gi which exceeds the node's allocatable resources.
+
+Correct sizing for a small L4 node:
+
+```yaml
+resources:
+  requests:
+    cpu: "2"
+    memory: 10Gi
+    nvidia.com/gpu: "1"
+  limits:
+    cpu: "4"
+    memory: 14Gi
+    nvidia.com/gpu: "1"
+```
+
+The VRAM usage (model weights + KV cache) is independent of these CPU/RAM values — it lives
+entirely on the GPU device.
+
+---
+
 ## Bitnami Sealed Secrets chart — OpenShift SCC incompatibility
 
 The upstream Bitnami Sealed Secrets Helm chart hardcodes `runAsUser: 1001` and `fsGroup: 65534` in both `podSecurityContext` and `containerSecurityContext`. OpenShift's restricted SCC rejects pods with hardcoded UIDs/GIDs.
