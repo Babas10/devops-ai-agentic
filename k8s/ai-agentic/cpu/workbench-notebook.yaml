@@ -1,0 +1,54 @@
+---
+apiVersion: kubeflow.org/v1
+kind: Notebook
+metadata:
+  name: agent-workbench
+  namespace: ai-agentic
+  annotations:
+    notebooks.opendatahub.io/inject-oauth: "true"
+    notebooks.opendatahub.io/last-image-selection: "jupyter-datascience-cpu-py312-ubi9:2025.1"
+    notebooks.opendatahub.io/last-size-selection: "Small"
+    opendatahub.io/username: "admin"
+spec:
+  template:
+    spec:
+      containers:
+        - name: agent-workbench
+          image: image-registry.openshift-image-registry.svc:5000/redhat-ods-applications/jupyter-datascience-cpu-py312-ubi9:2025.1
+          imagePullPolicy: Always
+          workingDir: /opt/app-root/src
+          env:
+            - name: NOTEBOOK_ARGS
+              value: >-
+                --ServerApp.port=8888
+                --ServerApp.token=''
+                --ServerApp.password=''
+                --ServerApp.base_url=/notebook/ai-agentic/agent-workbench
+                --ServerApp.quit_button=False
+            - name: JUPYTER_IMAGE
+              value: "image-registry.openshift-image-registry.svc:5000/redhat-ods-applications/jupyter-datascience-cpu-py312-ubi9:2025.1"
+            - name: OLLAMA_BASE_URL
+              value: "http://ollama.ai-agentic.svc:11434"
+          ports:
+            - containerPort: 8888
+              name: notebook-port
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "2"
+              memory: 8Gi
+            requests:
+              cpu: "1"
+              memory: 4Gi
+          volumeMounts:
+            - mountPath: /opt/app-root/src
+              name: agent-workbench
+            - mountPath: /dev/shm
+              name: shm
+      volumes:
+        - name: agent-workbench
+          persistentVolumeClaim:
+            claimName: agent-workbench
+        - name: shm
+          emptyDir:
+            medium: Memory
