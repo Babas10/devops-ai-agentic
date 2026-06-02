@@ -27,8 +27,8 @@ spec:
                 --ServerApp.quit_button=False
             - name: JUPYTER_IMAGE
               value: "image-registry.openshift-image-registry.svc:5000/redhat-ods-applications/jupyter-datascience-cpu-py312-ubi9:2025.1"
-            - name: OLLAMA_BASE_URL
-              value: "http://ollama.ai-agentic.svc:11434"
+            - name: QWEN_INFERENCE_URL
+              value: "http://qwen-predictor.ai-agentic.svc.cluster.local"
           ports:
             - containerPort: 8888
               name: notebook-port
