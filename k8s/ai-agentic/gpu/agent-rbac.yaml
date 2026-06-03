@@ -1,0 +1,72 @@
+---
+# RBAC for the AI agent — grants least-privilege access to the Kubernetes API.
+#
+# Two subjects share the same Role:
+#   - agent-workbench: the RHOAI notebook SA (used during development/testing)
+#   - agent:           the agent pod SA (used in production, Story 2.12)
+#
+# Permissions are scoped to the ai-agentic namespace only (Role, not ClusterRole).
+# The namespace guardrail in monitor_cluster.py provides a second layer of
+# restriction at the application level — see docs/agent-architecture.md.
+#
+# Read permissions (monitor_cluster, verify):
+#   - pods:    list unhealthy pods, poll recovery status
+#   - events:  read event messages for missing secret detection
+#
+# Write permissions (execute_fix):
+#   - deployments: patch image / env / resource fields to fix alerts
+#   - secrets:     create missing secrets identified by the agent
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent
+  namespace: ai-agentic
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-role
+  namespace: ai-agentic
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "patch"]
+---
+# Binding for the RHOAI workbench SA — enables API calls during notebook testing
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-role-workbench
+  namespace: ai-agentic
+subjects:
+  - kind: ServiceAccount
+    name: agent-workbench
+    namespace: ai-agentic
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: agent-role
+---
+# Binding for the agent pod SA — used by the production deployment (Story 2.12)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-role-agent
+  namespace: ai-agentic
+subjects:
+  - kind: ServiceAccount
+    name: agent
+    namespace: ai-agentic
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: agent-role

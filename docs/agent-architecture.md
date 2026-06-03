@@ -198,13 +198,78 @@ summary. The report is printed to stdout (visible in pod logs) and stored in
 
 ---
 
+## Guardrails
+
+### What are guardrails?
+
+Guardrails are hard limits that constrain what the agent is allowed to observe and act on,
+regardless of what the LLM decides. They exist because LLMs can make mistakes — a model asked
+to fix a pod could, in theory, produce a fix plan that targets a system namespace. Guardrails
+ensure that even a bad LLM output cannot cause harm outside the intended blast radius.
+
+### Where guardrails are applied — and why
+
+Two layers are used deliberately:
+
+#### Layer 1 — `monitor_cluster` (primary, deny at the gate)
+
+The first and most important guardrail is in `monitor_cluster`: only namespaces on an explicit
+**allowlist** are queried. If a namespace is not in `WATCHED_NAMESPACES`, the agent never
+learns about pods in it. No alert is ever generated for system namespaces.
+
+```python
+WATCHED_NAMESPACES = os.environ.get("WATCHED_NAMESPACES", "ai-agentic").split(",")
+BLOCKED_PREFIXES   = ["openshift-", "kube-", "kube-system", "redhat-", "rhoas-"]
+```
+
+**Why here?** Because preventing a problem at the source is always stronger than catching it
+later. If a system namespace never enters the pipeline, `classify_alert`, `plan_fix`, and
+`execute_fix` never have an opportunity to act on it — no matter how the LLM behaves.
+
+#### Layer 2 — `execute_fix` (safety net, deny before destructive action)
+
+Before executing any Kubernetes API call (patch, create, delete), `execute_fix` re-checks
+that the target namespace is not on the blocked prefix list.
+
+**Why a second check?** Defense in depth. Future code changes, new graph entry points, or
+direct calls to `execute_fix` in tests could bypass `monitor_cluster`. The safety net
+ensures no destructive action ever touches a system namespace regardless of how the alert
+arrived in the state.
+
+### Decision — why not in `classify_alert` or `plan_fix`?
+
+| Node | Why not the primary guardrail? |
+|------|-------------------------------|
+| `classify_alert` | Too late — the alert already entered the pipeline |
+| `plan_fix` | The LLM is already reasoning about the alert — blocking here wastes tokens |
+| `execute_fix` | Good safety net, but too late to be the *only* guardrail |
+| `monitor_cluster` | **Correct** — prevents the problem from existing at all |
+
+### Configuration
+
+Guardrails are operator-controlled via environment variables, not hardcoded in application
+logic. This allows the watched scope to be adjusted per deployment without code changes:
+
+```bash
+# Watch a single namespace (default)
+WATCHED_NAMESPACES=ai-agentic
+
+# Watch multiple namespaces
+WATCHED_NAMESPACES=ai-agentic,team-a,team-b
+```
+
+The blocked prefix list (`openshift-`, `kube-`, `redhat-`, `rhoas-`) is hardcoded in the
+agent as a non-negotiable safety rule — it cannot be overridden by configuration.
+
+---
+
 ## Implementation Roadmap
 
 | Story | File(s) | Status |
 |-------|---------|--------|
 | 2.1 — RHOAI Workbench | `k8s/ai-agentic/gpu/workbench-*.yaml` | ✅ Done |
 | 2.2 — State schema + graph skeleton | `agent/state.py`, `agent/graph.py`, `agent/nodes/` | ✅ Done |
-| 2.3 — RAG knowledge base | `agent/knowledge.py` | 🔲 Todo |
+| 2.3 — RAG knowledge base | `agent/knowledge.py` | ✅ Done |
 | 2.4 — `monitor_cluster` node | `agent/nodes/monitor_cluster.py` | 🔲 Todo |
 | 2.5 — `classify_alert` node | `agent/nodes/classify_alert.py` | 🔲 Todo |
 | 2.6 — `search_rag` node | `agent/nodes/search_rag.py` | 🔲 Todo |
