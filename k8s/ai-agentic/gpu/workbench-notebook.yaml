@@ -28,7 +28,7 @@ spec:
             - name: JUPYTER_IMAGE
               value: "image-registry.openshift-image-registry.svc:5000/redhat-ods-applications/jupyter-datascience-cpu-py312-ubi9:2025.1"
             - name: QWEN_INFERENCE_URL
-              value: "http://qwen-predictor.ai-agentic.svc.cluster.local"
+              value: "http://qwen-predictor.ai-agentic.svc.cluster.local:8080"
           ports:
             - containerPort: 8888
               name: notebook-port

@@ -56,7 +56,7 @@ def _classify_by_keyword(reason: str, message: str) -> str | None:
 
 
 def _build_llm() -> ChatOpenAI:
-    base_url = os.environ.get("QWEN_INFERENCE_URL", "http://qwen-predictor.ai-agentic.svc.cluster.local")
+    base_url = os.environ.get("QWEN_INFERENCE_URL", "http://qwen-predictor.ai-agentic.svc.cluster.local:8080")
     return ChatOpenAI(
         model="qwen",
         base_url=base_url.rstrip("/") + "/v1",
@@ -89,7 +89,7 @@ def classify_alert(state: AgentState) -> dict:
         return {"alert_type": fast}
 
     # 2. LLM classification
-    base_url = os.environ.get("QWEN_INFERENCE_URL", "http://qwen-predictor.ai-agentic.svc.cluster.local")
+    base_url = os.environ.get("QWEN_INFERENCE_URL", "http://qwen-predictor.ai-agentic.svc.cluster.local:8080")
     print(f"[classify_alert] no keyword match — calling Qwen at {base_url}")
     try:
         llm = _build_llm()
