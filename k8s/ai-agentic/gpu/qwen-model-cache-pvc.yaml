@@ -5,7 +5,8 @@
 # on every pod start (cold start takes ~5-10 minutes on a typical connection).
 # This PVC mounts at HF_HOME so the download is persisted across restarts.
 #
-# Size: 20 Gi — model weights ~14 Gi (bfloat16) + HF Hub cache overhead.
+# Size: 40 Gi — model weights ~14 Gi (bfloat16) + HF Hub cache overhead.
+#   Expanded from 20 Gi after pod crashed with ENOSPC during model download.
 # StorageClass: unset — uses cluster default (gp3 on AWS-backed RHDP clusters).
 # AccessMode: ReadWriteOnce — only one vLLM pod mounts the cache at a time.
 apiVersion: v1
@@ -18,4 +19,4 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 20Gi
+      storage: 40Gi
