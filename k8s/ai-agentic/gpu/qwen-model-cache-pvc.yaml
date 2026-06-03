@@ -1,0 +1,21 @@
+---
+# PVC for Qwen2.5-7B-Instruct model cache.
+#
+# Without this, vLLM downloads 14 GiB of model weights from HuggingFace Hub
+# on every pod start (cold start takes ~5-10 minutes on a typical connection).
+# This PVC mounts at HF_HOME so the download is persisted across restarts.
+#
+# Size: 20 Gi — model weights ~14 Gi (bfloat16) + HF Hub cache overhead.
+# StorageClass: unset — uses cluster default (gp3 on AWS-backed RHDP clusters).
+# AccessMode: ReadWriteOnce — only one vLLM pod mounts the cache at a time.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qwen-model-cache
+  namespace: ai-agentic
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
