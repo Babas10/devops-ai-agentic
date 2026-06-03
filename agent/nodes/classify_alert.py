@@ -44,10 +44,10 @@ _KEYWORD_RULES: list[tuple[set[str], str]] = [
 
 
 def _classify_by_keyword(reason: str, message: str) -> str | None:
-    """Return a type if keywords unambiguously match, else None."""
+    """Return a type if any keyword in a rule matches, else None."""
     text = f"{reason} {message}".lower()
     for keywords, label in _KEYWORD_RULES:
-        if all(kw in text for kw in keywords):
+        if any(kw in text for kw in keywords):
             return label
     return None
 
@@ -100,6 +100,7 @@ def classify_alert(state: AgentState) -> dict:
 
     except Exception as exc:
         logger.error("classify_alert LLM call failed: %s", exc)
+        print(f"[classify_alert] LLM error: {exc}")
         alert_type = "UNKNOWN"
 
     logger.info("classify_alert result: %s (reason=%r)", alert_type, reason)
