@@ -1,0 +1,19 @@
+---
+# Persistent storage for the agent pod.
+#
+# Mounted at /data with two sub-paths:
+#   /data/huggingface  — HF_HOME: nomic-embed-text-v1 embedding model (~547 Mi)
+#   /data/chroma       — ChromaDB runbook index
+#
+# 3 Gi gives comfortable headroom for both, with room for future models.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-data
+  namespace: ai-agentic
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
