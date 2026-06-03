@@ -1,0 +1,52 @@
+---
+# LangGraph agent — continuous monitoring and self-healing loop.
+#
+# The agent runs graph.invoke({}) every LOOP_INTERVAL_S seconds:
+#   monitor_cluster → classify_alert → search_rag → plan_fix
+#   → execute_fix → verify → report
+#
+# Image: built from agent/Dockerfile and pushed to the OpenShift internal
+# registry. Update the image tag after each build:
+#   oc start-build agent --from-dir=. --follow -n ai-agentic
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+  namespace: ai-agentic
+  labels:
+    app: agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent
+  template:
+    metadata:
+      labels:
+        app: agent
+    spec:
+      serviceAccountName: agent
+      containers:
+        - name: agent
+          image: image-registry.openshift-image-registry.svc:5000/ai-agentic/agent:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: agent-config
+          env:
+            - name: HF_HOME
+              value: /data/huggingface
+          resources:
+            requests:
+              cpu: "500m"
+              memory: 1Gi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: agent-data
+              mountPath: /data
+      volumes:
+        - name: agent-data
+          persistentVolumeClaim:
+            claimName: agent-data
