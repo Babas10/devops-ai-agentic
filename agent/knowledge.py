@@ -10,8 +10,17 @@ CHROMA_PERSIST_DIR env var overrides the default persist path (/tmp/chroma_db).
 
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Optional
+
+# ChromaDB requires sqlite3 >= 3.35.0. RHOAI workbench images ship an older
+# system sqlite3, but pysqlite3-binary provides a compatible version.
+try:
+    __import__("pysqlite3")
+    sys.modules["sqlite3"] = sys.modules.pop("pysqlite3")
+except ImportError:
+    pass  # system sqlite3 is new enough, or pysqlite3-binary not installed
 
 import chromadb
 import yaml
