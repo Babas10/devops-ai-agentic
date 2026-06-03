@@ -1,13 +1,8 @@
 # Build context: project root
-#   docker build -f agent/Dockerfile -t <image> .
+#   podman build -f agent/Containerfile -t quay.io/edubois10/ai-agentic:1.0.0 .
+#   podman push quay.io/edubois10/ai-agentic:1.0.0
 #
-# Push to OpenShift internal registry:
-#   oc registry login
-#   docker build -f agent/Dockerfile \
-#     -t image-registry.openshift-image-registry.svc:5000/ai-agentic/agent:latest .
-#   docker push image-registry.openshift-image-registry.svc:5000/ai-agentic/agent:latest
-#
-# Or use an OpenShift binary build (no local Docker needed):
+# Or using an OpenShift binary build (no local container tool needed):
 #   oc new-build --binary --name=agent -n ai-agentic
 #   oc start-build agent --from-dir=. --follow -n ai-agentic
 

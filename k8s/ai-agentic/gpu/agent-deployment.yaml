@@ -5,9 +5,10 @@
 #   monitor_cluster → classify_alert → search_rag → plan_fix
 #   → execute_fix → verify → report
 #
-# Image: built from agent/Dockerfile and pushed to the OpenShift internal
-# registry. Update the image tag after each build:
-#   oc start-build agent --from-dir=. --follow -n ai-agentic
+# Image: built from agent/Containerfile and pushed to quay.io.
+# Update the tag here after each new build:
+#   podman build -f agent/Containerfile -t quay.io/edubois/ai-agentic:<tag> .
+#   podman push quay.io/edubois/ai-agentic:<tag>
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,7 +29,7 @@ spec:
       serviceAccountName: agent
       containers:
         - name: agent
-          image: image-registry.openshift-image-registry.svc:5000/ai-agentic/agent:latest
+          image: quay.io/edubois10/ai-agentic:1.0.0
           imagePullPolicy: Always
           envFrom:
             - configMapRef:
