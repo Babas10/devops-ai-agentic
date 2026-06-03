@@ -46,8 +46,11 @@ _KEYWORD_RULES: list[tuple[set[str], str]] = [
 def _classify_by_keyword(reason: str, message: str) -> str | None:
     """Return a type if any keyword in a rule matches, else None."""
     text = f"{reason} {message}".lower()
+    print(f"[classify_alert] keyword check — text: {text!r}")
     for keywords, label in _KEYWORD_RULES:
-        if any(kw in text for kw in keywords):
+        matched = [kw for kw in keywords if kw in text]
+        print(f"[classify_alert]   rule={label} matched={matched}")
+        if matched:
             return label
     return None
 
@@ -86,6 +89,8 @@ def classify_alert(state: AgentState) -> dict:
         return {"alert_type": fast}
 
     # 2. LLM classification
+    base_url = os.environ.get("QWEN_INFERENCE_URL", "http://qwen-predictor.ai-agentic.svc.cluster.local")
+    print(f"[classify_alert] no keyword match — calling Qwen at {base_url}")
     try:
         llm = _build_llm()
         response = llm.invoke([
@@ -93,14 +98,14 @@ def classify_alert(state: AgentState) -> dict:
             HumanMessage(content=f"reason: {reason}\nmessage: {message}"),
         ])
         raw = response.content.strip().upper()
+        print(f"[classify_alert] Qwen raw response: {raw!r}")
 
         # Extract the first matching label in case the model adds stray text
         match = re.search(r"IMAGE_PULL_BACKOFF|MISSING_SECRET|UNKNOWN", raw)
         alert_type = match.group(0) if match else "UNKNOWN"
 
     except Exception as exc:
-        logger.error("classify_alert LLM call failed: %s", exc)
-        print(f"[classify_alert] LLM error: {exc}")
+        print(f"[classify_alert] LLM error ({type(exc).__name__}): {exc}")
         alert_type = "UNKNOWN"
 
     logger.info("classify_alert result: %s (reason=%r)", alert_type, reason)
