@@ -27,8 +27,6 @@ spec:
         app: agent
     spec:
       serviceAccountName: agent
-      imagePullSecrets:
-        - name: edubois10-aiagent-pull-secret
       containers:
         - name: agent
           image: quay.io/edubois10/ai-agentic:1.0.0
