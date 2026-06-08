@@ -48,6 +48,7 @@ def _build_llm() -> ChatOpenAI:
         api_key="unused",
         temperature=0,
         max_tokens=300,
+        timeout=300,
     )
 
 
