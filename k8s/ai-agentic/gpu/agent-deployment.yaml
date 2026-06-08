@@ -37,6 +37,13 @@ spec:
           env:
             - name: HF_HOME
               value: /data/huggingface
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agent-github-secret
+                  key: GITHUB_TOKEN
+            - name: REPO_MAPPING_FILE
+              value: /etc/agent/repos.yaml
           resources:
             requests:
               cpu: "500m"
@@ -47,7 +54,13 @@ spec:
           volumeMounts:
             - name: agent-data
               mountPath: /data
+            - name: repo-mapping
+              mountPath: /etc/agent
+              readOnly: true
       volumes:
         - name: agent-data
           persistentVolumeClaim:
             claimName: agent-data
+        - name: repo-mapping
+          configMap:
+            name: agent-repo-mapping

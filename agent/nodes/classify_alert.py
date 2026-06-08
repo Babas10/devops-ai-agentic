@@ -1,10 +1,11 @@
 """classify_alert node — use Qwen to classify a raw alert into a canonical type.
 
 Sends the alert reason + message to Qwen via the KServe OpenAI-compatible
-endpoint and extracts one of three labels:
+endpoint and extracts one of four labels:
 
   IMAGE_PULL_BACKOFF  — wrong image tag or missing image pull secret
   MISSING_SECRET      — pod references a secret that does not exist
+  CRASH_LOOP          — container crashes repeatedly (app/code error)
   UNKNOWN             — anything else; no automated fix available
 
 QWEN_INFERENCE_URL env var must point to the KServe predictor service,
@@ -22,7 +23,7 @@ from agent.state import AgentState
 
 logger = logging.getLogger(__name__)
 
-VALID_TYPES = {"IMAGE_PULL_BACKOFF", "MISSING_SECRET", "UNKNOWN"}
+VALID_TYPES = {"IMAGE_PULL_BACKOFF", "MISSING_SECRET", "CRASH_LOOP", "UNKNOWN"}
 
 SYSTEM_PROMPT = """\
 You are a Kubernetes alert classifier. Your only job is to read a pod alert and
@@ -30,6 +31,7 @@ return exactly one of these labels — nothing else, no explanation:
 
   IMAGE_PULL_BACKOFF  — the pod cannot pull its container image (wrong tag, missing pull secret, registry unreachable)
   MISSING_SECRET      — the pod references a Kubernetes Secret that does not exist
+  CRASH_LOOP          — the container crashes repeatedly (CrashLoopBackOff, application error, bad code)
   UNKNOWN             — anything else
 
 Reply with the label only. Do not add punctuation, quotes, or any other text.\
@@ -40,6 +42,7 @@ Reply with the label only. Do not add punctuation, quotes, or any other text.\
 _KEYWORD_RULES: list[tuple[set[str], str]] = [
     ({"imagepullbackoff", "errimagepull", "pull access denied", "manifest unknown"}, "IMAGE_PULL_BACKOFF"),
     ({"secret", "not found", "createcontainerconfigerror"}, "MISSING_SECRET"),
+    ({"crashloopbackoff", "back-off restarting failed container"}, "CRASH_LOOP"),
 ]
 
 
@@ -101,7 +104,7 @@ def classify_alert(state: AgentState) -> dict:
         print(f"[classify_alert] Qwen raw response: {raw!r}")
 
         # Extract the first matching label in case the model adds stray text
-        match = re.search(r"IMAGE_PULL_BACKOFF|MISSING_SECRET|UNKNOWN", raw)
+        match = re.search(r"IMAGE_PULL_BACKOFF|MISSING_SECRET|CRASH_LOOP|UNKNOWN", raw)
         alert_type = match.group(0) if match else "UNKNOWN"
 
     except Exception as exc:

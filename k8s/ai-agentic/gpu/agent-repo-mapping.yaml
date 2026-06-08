@@ -1,0 +1,39 @@
+---
+# Repository mapping for the AI agent investigation nodes.
+#
+# Maps namespace/deployment pairs to their GitHub repositories so the
+# investigate_image and investigate_code nodes know where to look for
+# recent commits and diffs.
+#
+# Fields per entry:
+#   namespace     — Kubernetes namespace of the deployment
+#   deployment    — Deployment name (must match exactly)
+#   source_repo   — GitHub repo (owner/repo) containing application code
+#                   Used by investigate_code for CrashLoopBackOff diffs
+#   helm_repo     — GitHub repo (owner/repo) containing the Helm chart
+#                   Used by investigate_image for ImagePullBackOff diffs
+#   helm_path     — Path to the Helm chart root within helm_repo
+#
+# Add a new entry here whenever a new application is onboarded.
+# The agent reloads this file on every investigation — no restart needed.
+#
+# The source-repo annotation on the Deployment serves as a fallback when
+# a deployment is not listed here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-repo-mapping
+  namespace: ai-agentic
+data:
+  repos.yaml: |
+    - namespace: agent-apps
+      deployment: demo-todo
+      source_repo: Babas10/demo-todo
+      helm_repo: Babas10/demo-todo
+      helm_path: helm/
+
+    - namespace: agent-apps
+      deployment: demo-stopwatch
+      source_repo: Babas10/demo-stopwatch
+      helm_repo: Babas10/demo-stopwatch
+      helm_path: helm/
