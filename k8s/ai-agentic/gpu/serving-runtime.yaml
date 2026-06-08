@@ -1,5 +1,5 @@
 ---
-# vLLM GPU ServingRuntime for Qwen2.5-7B-Instruct on NVIDIA L4.
+# vLLM GPU ServingRuntime for Qwen2.5-1.5B-Instruct on NVIDIA L4.
 #
 # Image: odh-vllm-cuda-rhel9 (amd64) — the only RHOAI vLLM image with an
 # amd64 build. Runs in GPU mode when CUDA_VISIBLE_DEVICES is not overridden.
@@ -7,11 +7,11 @@
 # GPU: NVIDIA L4 — 23 GiB VRAM, compute 8.9 (Ada Lovelace), CUDA 12.4.
 #
 # Sizing rationale:
-#   - Model weights (bfloat16, 7B): ~14 GiB
-#   - KV cache + vLLM overhead:     ~4 GiB
-#   - Total VRAM:                   ~18 GiB (fits comfortably in 23 GiB L4)
-#   - max-model-len: 8192           — full context window
-#   - max-num-seqs: 16              — GPU handles higher concurrency than CPU
+#   - Model weights (bfloat16, 1.5B): ~3 GiB
+#   - KV cache + vLLM overhead:       ~2 GiB
+#   - Total VRAM:                     ~5 GiB (well within 23 GiB L4)
+#   - max-model-len: 8192             — full context window
+#   - max-num-seqs: 16                — GPU handles higher concurrency than CPU
 #
 # See docs/sizing.md for the full sizing methodology.
 apiVersion: serving.kserve.io/v1alpha1
@@ -36,7 +36,7 @@ spec:
         # vLLM downloads the model directly from HuggingFace Hub using the
         # HUGGING_FACE_HUB_TOKEN env var. KServe's storage initializer is
         # bypassed — hf:// storageUri is not supported in this KServe version.
-        - --model=Qwen/Qwen2.5-7B-Instruct
+        - --model=Qwen/Qwen2.5-1.5B-Instruct
         - --dtype=bfloat16
         - --port=8080
         - --served-model-name={{.Name}}
@@ -62,11 +62,11 @@ spec:
       resources:
         requests:
           cpu: "2"
-          memory: 10Gi
+          memory: 4Gi
           nvidia.com/gpu: "1"
         limits:
           cpu: "4"
-          memory: 14Gi
+          memory: 6Gi
           nvidia.com/gpu: "1"
   volumes:
     - name: model-cache
