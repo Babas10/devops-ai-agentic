@@ -14,7 +14,7 @@ data:
   # Comma-separated list of namespaces the agent is allowed to monitor and fix.
   # System namespace prefixes (openshift-*, kube-*, etc.) are always blocked
   # regardless of this list — see monitor_cluster.py BLOCKED_PREFIXES.
-  WATCHED_NAMESPACES: "ai-agentic"
+  WATCHED_NAMESPACES: "ai-agentic,agent-apps"
 
   # Seconds to sleep between monitoring cycles
   LOOP_INTERVAL_S: "60"

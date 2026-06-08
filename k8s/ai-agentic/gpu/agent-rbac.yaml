@@ -5,7 +5,9 @@
 #   - agent-workbench: the RHOAI notebook SA (used during development/testing)
 #   - agent:           the agent pod SA (used in production, Story 2.12)
 #
-# Permissions are scoped to the ai-agentic namespace only (Role, not ClusterRole).
+# Permissions are scoped per namespace (Role, not ClusterRole).
+# The same Role + RoleBindings are duplicated for the agent-apps namespace
+# so the agent can monitor and fix demo apps running there.
 # The namespace guardrail in monitor_cluster.py provides a second layer of
 # restriction at the application level — see docs/agent-architecture.md.
 #
@@ -38,7 +40,7 @@ rules:
     resources: ["secrets"]
     verbs: ["get", "list", "create", "patch"]
   - apiGroups: ["apps"]
-    resources: ["deployments"]
+    resources: ["deployments", "replicasets"]
     verbs: ["get", "list", "patch", "update"]
 ---
 # Binding for the RHOAI workbench SA — enables API calls during notebook testing
@@ -62,6 +64,54 @@ kind: RoleBinding
 metadata:
   name: agent-role-agent
   namespace: ai-agentic
+subjects:
+  - kind: ServiceAccount
+    name: agent
+    namespace: ai-agentic
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: agent-role
+---
+# --- agent-apps namespace (demo apps for repair scenarios) ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-role
+  namespace: agent-apps
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-role-workbench
+  namespace: agent-apps
+subjects:
+  - kind: ServiceAccount
+    name: agent-workbench
+    namespace: ai-agentic
+roleRef:
+  kind: Role
+  apiGroup: rbac.authorization.k8s.io
+  name: agent-role
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-role-agent
+  namespace: agent-apps
 subjects:
   - kind: ServiceAccount
     name: agent
