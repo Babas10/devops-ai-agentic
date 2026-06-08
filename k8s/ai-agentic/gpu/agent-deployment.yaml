@@ -1,14 +1,18 @@
 ---
 # LangGraph agent — continuous monitoring and self-healing loop.
+# Includes the audit dashboard as a sidecar (shares agent-data PVC).
 #
 # The agent runs graph.invoke({}) every LOOP_INTERVAL_S seconds:
 #   monitor_cluster → classify_alert → search_rag → plan_fix
 #   → execute_fix → verify → report
 #
-# Image: built from agent/Containerfile and pushed to quay.io.
-# Update the tag here after each new build:
-#   podman build -f agent/Containerfile -t quay.io/edubois/ai-agentic:<tag> .
-#   podman push quay.io/edubois/ai-agentic:<tag>
+# Agent image: built from agent/Containerfile and pushed to quay.io.
+# Dashboard image: built from dashboard/Containerfile.
+# Update the tags here after each new build:
+#   podman build -f agent/Containerfile -t quay.io/edubois10/ai-agentic:<tag> .
+#   podman build -f dashboard/Containerfile -t quay.io/edubois10/ai-agentic-dashboard:<tag> .
+#   podman push quay.io/edubois10/ai-agentic:<tag>
+#   podman push quay.io/edubois10/ai-agentic-dashboard:<tag>
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -59,8 +63,26 @@ spec:
             - name: repo-mapping
               mountPath: /etc/agent
               readOnly: true
-            - name: audit-data
-              mountPath: /data/audit
+        - name: dashboard
+          image: quay.io/edubois10/ai-agentic-dashboard:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8501
+              protocol: TCP
+          env:
+            - name: AUDIT_DB
+              value: /data/audit/audit.db
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 512Mi
+          volumeMounts:
+            - name: agent-data
+              mountPath: /data
+              readOnly: true
       volumes:
         - name: agent-data
           persistentVolumeClaim:
@@ -68,6 +90,3 @@ spec:
         - name: repo-mapping
           configMap:
             name: agent-repo-mapping
-        - name: audit-data
-          persistentVolumeClaim:
-            claimName: audit-data
