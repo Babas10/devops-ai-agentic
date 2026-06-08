@@ -139,7 +139,10 @@ def plan_fix(state: AgentState) -> dict:
             if plan and _validate(plan):
                 fix_plan = json.dumps(plan)
                 print(f"[plan_fix] valid plan: {fix_plan}")
-                return {"fix_plan": fix_plan}
+                return {
+                    "fix_plan": fix_plan,
+                    "node_trace": state.get("node_trace", []) + ["plan_fix"],
+                }
 
             print(f"[plan_fix] attempt {attempt + 1} invalid — retrying")
             messages.append(HumanMessage(content=RETRY_PROMPT))
@@ -149,4 +152,7 @@ def plan_fix(state: AgentState) -> dict:
             break
 
     logger.error("plan_fix failed to produce a valid plan after retries")
-    return {"fix_plan": ""}
+    return {
+        "fix_plan": "",
+        "node_trace": state.get("node_trace", []) + ["plan_fix"],
+    }

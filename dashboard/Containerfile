@@ -1,0 +1,32 @@
+# Build context: project root
+#   podman build -f dashboard/Containerfile -t quay.io/edubois10/ai-agentic-dashboard:1.0.0 .
+#   podman push quay.io/edubois10/ai-agentic-dashboard:1.0.0
+
+FROM registry.access.redhat.com/ubi9/python-311
+
+WORKDIR /opt/app-root/src
+
+COPY dashboard/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY dashboard/app.py ./app.py
+
+ENV PYTHONPATH=/opt/app-root/src
+
+# Audit DB lives on the audit-data PVC, mounted at /data/audit
+ENV AUDIT_DB=/data/audit/audit.db
+
+# Ensure the mount point exists and is group-writable for arbitrary OpenShift UIDs
+USER root
+RUN mkdir -p /data/audit && \
+    chown -R 1001:0 /data && \
+    chmod -R g+rwX /data
+USER 1001
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "app.py", \
+     "--server.port=8501", \
+     "--server.address=0.0.0.0", \
+     "--server.headless=true", \
+     "--browser.gatherUsageStats=false"]

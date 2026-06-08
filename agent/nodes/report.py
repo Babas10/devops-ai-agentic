@@ -21,6 +21,7 @@ import os
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
+from agent.audit import write_record
 from agent.state import AgentState
 
 logger = logging.getLogger(__name__)
@@ -130,4 +131,10 @@ def report(state: AgentState) -> dict:
         report_text = _fallback_report(state)
         print(f"[report] fallback report:\n{report_text}")
 
-    return {"report": report_text}
+    node_trace = state.get("node_trace", []) + ["report"]
+
+    # Persist the completed intervention to the audit log
+    final_state = {**state, "report": report_text, "node_trace": node_trace}
+    write_record(final_state)
+
+    return {"report": report_text, "node_trace": node_trace}

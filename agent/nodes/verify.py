@@ -85,7 +85,11 @@ def verify(state: AgentState) -> dict:
 
             if healthy:
                 print("[verify] pod recovered ✓")
-                return {"verified": True, "retry_count": retry_count}
+                return {
+                    "verified": True,
+                    "retry_count": retry_count,
+                    "node_trace": state.get("node_trace", []) + ["verify"],
+                }
         else:
             print(f"[verify] no pods matching {pod_name!r} yet — waiting")
 
@@ -93,10 +97,11 @@ def verify(state: AgentState) -> dict:
 
     # Timeout reached
     new_retry_count = retry_count + 1
+    _trace = state.get("node_trace", []) + ["verify"]
     if new_retry_count >= MAX_RETRIES:
         print(f"[verify] max retries ({MAX_RETRIES}) reached — giving up")
-        return {"verified": False, "retry_count": new_retry_count}
+        return {"verified": False, "retry_count": new_retry_count, "node_trace": _trace}
 
     print(f"[verify] not recovered after {VERIFY_TIMEOUT_S}s — retrying "
           f"({new_retry_count}/{MAX_RETRIES})")
-    return {"verified": False, "retry_count": new_retry_count}
+    return {"verified": False, "retry_count": new_retry_count, "node_trace": _trace}
