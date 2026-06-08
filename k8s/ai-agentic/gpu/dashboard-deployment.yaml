@@ -1,0 +1,49 @@
+---
+# Audit dashboard — Streamlit app that reads the SQLite audit log.
+#
+# Image: built from dashboard/Containerfile and pushed to quay.io.
+# Update the tag here after each new build:
+#   podman build -f dashboard/Containerfile -t quay.io/edubois10/ai-agentic-dashboard:<tag> .
+#   podman push quay.io/edubois10/ai-agentic-dashboard:<tag>
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  namespace: ai-agentic
+  labels:
+    app: dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dashboard
+  template:
+    metadata:
+      labels:
+        app: dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: quay.io/edubois10/ai-agentic-dashboard:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8501
+              protocol: TCP
+          env:
+            - name: AUDIT_DB
+              value: /data/audit/audit.db
+          resources:
+            requests:
+              cpu: "100m"
+              memory: 256Mi
+            limits:
+              cpu: "500m"
+              memory: 512Mi
+          volumeMounts:
+            - name: audit-data
+              mountPath: /data/audit
+              readOnly: true
+      volumes:
+        - name: audit-data
+          persistentVolumeClaim:
+            claimName: audit-data

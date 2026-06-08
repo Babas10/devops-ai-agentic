@@ -14,4 +14,6 @@ class AgentState(TypedDict):
     retry_count: int
     verified: bool
     report: str
+    node_trace: list[str]  # ordered list of node names executed this cycle
+    cycle_start: float     # unix timestamp set by classify_alert
     messages: Annotated[list, add_messages]

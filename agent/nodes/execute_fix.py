@@ -115,13 +115,18 @@ def execute_fix(state: AgentState) -> dict:
     No exceptions are propagated — verify node decides whether to retry.
     """
     fix_plan_str = state.get("fix_plan", "")
+    _trace = state.get("node_trace", []) + ["execute_fix"]
+
     if not fix_plan_str:
-        return {"fix_result": "ERROR: empty fix_plan — plan_fix did not produce a valid plan"}
+        return {
+            "fix_result": "ERROR: empty fix_plan — plan_fix did not produce a valid plan",
+            "node_trace": _trace,
+        }
 
     try:
         plan = json.loads(fix_plan_str)
     except json.JSONDecodeError as exc:
-        return {"fix_result": f"ERROR: invalid fix_plan JSON: {exc}"}
+        return {"fix_result": f"ERROR: invalid fix_plan JSON: {exc}", "node_trace": _trace}
 
     action = plan.get("action", "")
     target = plan.get("target", "")
@@ -132,7 +137,10 @@ def execute_fix(state: AgentState) -> dict:
 
     # Layer 2 guardrail
     if not _namespace_allowed(namespace):
-        return {"fix_result": f"ERROR: namespace {namespace!r} is blocked by guardrail"}
+        return {
+            "fix_result": f"ERROR: namespace {namespace!r} is blocked by guardrail",
+            "node_trace": _trace,
+        }
 
     _load_k8s_config()
 
@@ -163,4 +171,4 @@ def execute_fix(state: AgentState) -> dict:
         result = f"ERROR: unknown action {action!r}"
 
     print(f"[execute_fix] result: {result}")
-    return {"fix_result": result}
+    return {"fix_result": result, "node_trace": _trace}

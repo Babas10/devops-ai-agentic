@@ -44,6 +44,8 @@ spec:
                   key: GITHUB_TOKEN
             - name: REPO_MAPPING_FILE
               value: /etc/agent/repos.yaml
+            - name: AUDIT_DB
+              value: /data/audit/audit.db
           resources:
             requests:
               cpu: "500m"
@@ -57,6 +59,8 @@ spec:
             - name: repo-mapping
               mountPath: /etc/agent
               readOnly: true
+            - name: audit-data
+              mountPath: /data/audit
       volumes:
         - name: agent-data
           persistentVolumeClaim:
@@ -64,3 +68,6 @@ spec:
         - name: repo-mapping
           configMap:
             name: agent-repo-mapping
+        - name: audit-data
+          persistentVolumeClaim:
+            claimName: audit-data

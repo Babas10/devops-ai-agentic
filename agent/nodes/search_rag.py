@@ -14,4 +14,7 @@ def search_rag(state: AgentState) -> dict:
     query = alert.get("message") or alert_type or ""
 
     solutions = search_knowledge(query, alert_type=alert_type, n_results=3)
-    return {"solutions": solutions}
+    return {
+        "solutions": solutions,
+        "node_trace": state.get("node_trace", []) + ["search_rag"],
+    }

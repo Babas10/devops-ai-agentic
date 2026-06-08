@@ -15,6 +15,7 @@ e.g. http://qwen-predictor.ai-agentic.svc.cluster.local
 import logging
 import os
 import re
+import time
 
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -85,11 +86,17 @@ def classify_alert(state: AgentState) -> dict:
     reason = alert.get("reason", "")
     message = alert.get("message", "")
 
+    cycle_start = time.time()
+
     # 1. Fast-path keyword check
     fast = _classify_by_keyword(reason, message)
     if fast:
         logger.info("classify_alert fast-path: %s (reason=%r)", fast, reason)
-        return {"alert_type": fast}
+        return {
+            "alert_type": fast,
+            "cycle_start": cycle_start,
+            "node_trace": state.get("node_trace", []) + ["classify_alert"],
+        }
 
     # 2. LLM classification
     base_url = os.environ.get("QWEN_INFERENCE_URL", "http://qwen-predictor.ai-agentic.svc.cluster.local:8080")
@@ -112,4 +119,8 @@ def classify_alert(state: AgentState) -> dict:
         alert_type = "UNKNOWN"
 
     logger.info("classify_alert result: %s (reason=%r)", alert_type, reason)
-    return {"alert_type": alert_type}
+    return {
+        "alert_type": alert_type,
+        "cycle_start": cycle_start,
+        "node_trace": state.get("node_trace", []) + ["classify_alert"],
+    }

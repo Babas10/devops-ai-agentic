@@ -155,4 +155,5 @@ def monitor_cluster(state: AgentState) -> dict:
         "alerts": all_alerts,
         "current_alert": current_alert,
         "retry_count": 0,
+        "node_trace": ["monitor_cluster"],
     }

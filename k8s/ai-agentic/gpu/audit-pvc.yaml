@@ -1,0 +1,20 @@
+---
+# Shared audit storage — ReadWriteMany so both the agent and dashboard pods
+# can mount it simultaneously.
+#
+# The agent writes SQLite records at /data/audit/audit.db (report node).
+# The dashboard reads the same file.
+#
+# Uses ocs-storagecluster-cephfs which provides RWX on RHOAI clusters.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audit-data
+  namespace: ai-agentic
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: ocs-storagecluster-cephfs
