@@ -8,7 +8,7 @@ metadata:
     app: dashboard
 spec:
   selector:
-    app: dashboard
+    app: agent
   ports:
     - port: 8501
       targetPort: 8501
