@@ -29,8 +29,8 @@ SYSTEM_PROMPT = """\
 You are a Kubernetes operations assistant writing an incident summary.
 Given the context below, write a concise report of 3-5 sentences covering:
   1. What was wrong (alert type, affected pod/namespace)
-  2. What remediation was attempted
-  3. Whether the remediation succeeded or failed
+  2. What remediation was attempted (or, for CRASH_LOOP, what the likely root cause is based on pod logs and recent code changes)
+  3. Whether the remediation succeeded or failed (or a suggested fix for CRASH_LOOP)
 
 Write in plain prose, no bullet points, no markdown. Be direct and factual.\
 """
@@ -57,6 +57,7 @@ def _build_context(state: AgentState) -> str:
     fix_result = state.get("fix_result", "")
     verified = state.get("verified", False)
     retry_count = state.get("retry_count", 0)
+    investigation = state.get("investigation", {})
 
     lines = [
         f"Alert type: {alert_type}",
@@ -68,6 +69,18 @@ def _build_context(state: AgentState) -> str:
         f"Verified: {verified}",
         f"Retry attempts: {retry_count}",
     ]
+
+    if investigation.get("pod_logs"):
+        lines.append(f"\nPod logs (last 20 lines):\n{investigation['pod_logs']}")
+    if investigation.get("code_diff"):
+        lines.append(f"\nRecent source code changes:\n{investigation['code_diff']}")
+    if investigation.get("helm_diff"):
+        lines.append(f"\nRecent Helm changes:\n{investigation['helm_diff']}")
+    if investigation.get("previous_image"):
+        lines.append(f"Previous working image: {investigation['previous_image']}")
+    if investigation.get("current_image"):
+        lines.append(f"Current broken image: {investigation['current_image']}")
+
     return "\n".join(lines)
 
 

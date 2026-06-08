@@ -97,16 +97,26 @@ def _build_user_message(state: AgentState) -> str:
     alert = state.get("current_alert", {})
     alert_type = state.get("alert_type", "UNKNOWN")
     solutions = state.get("solutions", [])
+    investigation = state.get("investigation", {})
 
     runbook = "\n\n".join(solutions[:2]) if solutions else "No runbook available."
 
-    return (
-        f"Alert type: {alert_type}\n"
-        f"Pod: {alert.get('pod', 'unknown')} in namespace {alert.get('namespace', 'unknown')}\n"
-        f"Reason: {alert.get('reason', '')}\n"
-        f"Message: {alert.get('message', '')}\n\n"
-        f"Runbook context:\n{runbook}"
-    )
+    parts = [
+        f"Alert type: {alert_type}",
+        f"Pod: {alert.get('pod', 'unknown')} in namespace {alert.get('namespace', 'unknown')}",
+        f"Reason: {alert.get('reason', '')}",
+        f"Message: {alert.get('message', '')}",
+    ]
+
+    if investigation.get("previous_image"):
+        parts.append(f"Previous working image: {investigation['previous_image']}")
+    if investigation.get("current_image"):
+        parts.append(f"Current broken image: {investigation['current_image']}")
+    if investigation.get("helm_diff"):
+        parts.append(f"\nRecent Helm changes:\n{investigation['helm_diff']}")
+
+    parts.append(f"\nRunbook context:\n{runbook}")
+    return "\n".join(parts)
 
 
 def plan_fix(state: AgentState) -> dict:

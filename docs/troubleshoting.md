@@ -198,7 +198,7 @@ Escalate if:
 ```yaml
 id: KB-0002
 title: Pod CrashLoopBackOff
-alert_type: CRASH_LOOP_BACKOFF
+alert_type: CRASH_LOOP
 severity: high
 automatable: partially
 category: workload
