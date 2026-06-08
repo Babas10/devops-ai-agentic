@@ -119,12 +119,48 @@ def _build_user_message(state: AgentState) -> str:
     return "\n".join(parts)
 
 
-def plan_fix(state: AgentState) -> dict:
-    """Ask Qwen for a structured JSON fix plan based on alert + RAG context.
+def _fast_path(state: AgentState) -> dict | None:
+    """Return a deterministic fix plan when the investigation already provides
+    all the information needed — no LLM call required.
 
-    Retries once if the response is not valid JSON.
+    IMAGE_PULL_BACKOFF + previous_image known → patch_deployment_image
+    """
+    alert_type = state.get("alert_type", "")
+    investigation = state.get("investigation", {})
+    alert = state.get("current_alert", {})
+
+    if alert_type == "IMAGE_PULL_BACKOFF" and investigation.get("previous_image"):
+        pod_name = alert.get("pod", "")
+        parts = pod_name.split("-")
+        deployment = "-".join(parts[:-2]) if len(parts) > 2 else pod_name
+        plan = {
+            "action": "patch_deployment_image",
+            "target": deployment,
+            "params": {"image": investigation["previous_image"]},
+        }
+        fix_plan = json.dumps(plan)
+        print(f"[plan_fix] fast-path: previous_image known — {fix_plan}")
+        return {
+            "fix_plan": fix_plan,
+            "node_trace": state.get("node_trace", []) + ["plan_fix"],
+        }
+
+    return None
+
+
+def plan_fix(state: AgentState) -> dict:
+    """Produce a structured JSON fix plan.
+
+    Fast-path: if investigate_image already resolved previous_image for an
+    IMAGE_PULL_BACKOFF, build the plan directly — no LLM call needed.
+
+    LLM-path: ask Qwen for all other cases. Retries once on invalid JSON.
     Stores the JSON string in AgentState.fix_plan, or empty string on failure.
     """
+    fast = _fast_path(state)
+    if fast:
+        return fast
+
     llm = _build_llm()
     user_msg = _build_user_message(state)
     messages = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=user_msg)]
