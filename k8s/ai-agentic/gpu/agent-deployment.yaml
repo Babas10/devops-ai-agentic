@@ -33,7 +33,7 @@ spec:
       serviceAccountName: agent
       containers:
         - name: agent
-          image: quay.io/edubois10/ai-agentic:1.0.0
+          image: quay.io/edubois10/ai-agentic:1.1.0
           imagePullPolicy: Always
           envFrom:
             - configMapRef:
