@@ -8,3 +8,4 @@ metadata:
   labels:
     opendatahub.io/dashboard: "true"
     kubernetes.io/metadata.name: ai-agentic
+    modelmesh-enabled: "false"

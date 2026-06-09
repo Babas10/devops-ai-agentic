@@ -33,32 +33,18 @@ spec:
         - -m
         - vllm.entrypoints.openai.api_server
       args:
-        # vLLM downloads the model directly from HuggingFace Hub using the
-        # HUGGING_FACE_HUB_TOKEN env var. KServe's storage initializer is
-        # bypassed — hf:// storageUri is not supported in this KServe version.
-        - --model=Qwen/Qwen2.5-1.5B-Instruct
+        # KServe's storage initializer downloads the model from hf://Qwen/Qwen2.5-1.5B-Instruct
+        # into /mnt/models before this container starts. vLLM reads from that local path.
+        - --model=/mnt/models
         - --dtype=bfloat16
         - --port=8080
         - --served-model-name={{.Name}}
         - --max-model-len=8192
         - --max-num-seqs=16
-      env:
-        - name: HF_HOME
-          value: /tmp/hf_home
-        - name: HF_HUB_OFFLINE
-          value: "0"
-        - name: HUGGING_FACE_HUB_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: hf-token
-              key: token
       ports:
         - name: h2c
           containerPort: 8080
           protocol: TCP
-      volumeMounts:
-        - name: model-cache
-          mountPath: /tmp/hf_home
       resources:
         requests:
           cpu: "2"
@@ -68,7 +54,3 @@ spec:
           cpu: "4"
           memory: 6Gi
           nvidia.com/gpu: "1"
-  volumes:
-    - name: model-cache
-      persistentVolumeClaim:
-        claimName: qwen-model-cache
