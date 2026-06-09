@@ -120,29 +120,44 @@ pod restarts.
 
 ---
 
-## KServe storage initializer — HuggingFace Hub not supported in RHOAI 2.25.x
+## RHOAI Connection resources and model storage
 
-### What doesn't work
+### Storage options overview
 
-`storageUri: hf://...` is rejected by the KServe admission webhook in RHOAI 2.25.x:
+RHOAI supports three ways to store model artifacts for deployment. All use the `Connection`
+resource type (a Secret with specific labels/annotations that RHOAI recognises):
+
+| Storage option | storageUri format | Best for |
+|---|---|---|
+| S3-compatible object storage | `s3://bucket/path/` | Shared models, frequent updates without rebuilding |
+| OCI container registry | `oci://registry/image:tag` | Versioned/immutable model packages, CI/CD pipelines |
+| PVC (cluster storage) | `pvc://pvc-name/path/` | Dev/proto — train and serve in the same project |
+| HuggingFace Hub (external) | `hf://org/model-name` | Quick experimentation, public pre-trained models |
+
+All four formats are handled by the KServe **storage initializer** — an init container that
+runs before vLLM starts, downloads model weights to `/mnt/models`, then exits. vLLM reads
+from `/mnt/models` at startup (no HuggingFace API calls at runtime).
+
+### hf:// — version history
+
+`storageUri: hf://...` was **not supported in RHOAI 2.25.x**. The KServe admission webhook
+rejected it with:
 
 ```
 admission webhook "inferenceservice.kserve-webhook-server.pod-mutator" denied the request:
 storage type must be one of [s3, hdfs, webhdfs]. storage type [huggingface] is not supported
 ```
 
-Even if a `storage-config` Secret is present with `"type": "huggingface"`, the webhook rejects it because `huggingface` is not in the supported type list for this KServe version.
+Even a `storage-config` Secret with `"type": "huggingface"` did not help — the webhook
+blocked the request before the storage initializer ran.
 
-### Correct approach — let vLLM download the model directly
-
-Skip the KServe storage initializer entirely. Set the HuggingFace model ID directly in the ServingRuntime args and pass the token as an env var. vLLM handles the download on pod startup:
+**Workaround used in RHOAI 2.25.x:** skip the storage initializer entirely. Set the
+HuggingFace model ID directly in the ServingRuntime args:
 
 ```yaml
-# ServingRuntime
+# ServingRuntime — bypass pattern (RHOAI 2.25.x only)
 args:
   - --model=Qwen/Qwen2.5-1.5B-Instruct   # HF model ID, not /mnt/models
-  - --device=cpu
-  - --dtype=bfloat16
 env:
   - name: HUGGING_FACE_HUB_TOKEN
     valueFrom:
@@ -151,19 +166,80 @@ env:
         key: token
   - name: HF_HOME
     value: /tmp/hf_home
+  - name: HF_HUB_OFFLINE
+    value: "0"
 
-# InferenceService — no storageUri, no storage.key
+# InferenceService — no storageUri
 spec:
   predictor:
     model:
       modelFormat:
         name: vLLM
-      runtime: vllm-cpu
+      runtime: vllm-gpu
 ```
 
-The `storage-config` Secret is **not needed** with this approach. Only the `hf-token` SealedSecret is required (for the env var).
+`hf://` is **supported in newer RHOAI versions** (≥ 2.16 per Red Hat documentation). With it,
+the ServingRuntime becomes simpler — no HF env vars, no PVC cache, just `--model=/mnt/models`:
 
-First pod startup takes ~2-3 minutes while vLLM downloads the model into `HF_HOME`. The cache is in `/tmp/hf_home` (emptyDir) so the download repeats on pod restart.
+```yaml
+# ServingRuntime — with storage initializer (modern RHOAI)
+args:
+  - --model=/mnt/models    # storage initializer populates this path
+  - --dtype=bfloat16
+
+# InferenceService
+spec:
+  predictor:
+    model:
+      storageUri: hf://Qwen/Qwen2.5-1.5B-Instruct
+      modelFormat:
+        name: vLLM
+      runtime: vllm-gpu
+```
+
+For public models (Qwen2.5 is not gated), no HuggingFace token is needed by the storage
+initializer. For gated models, create a `storage-config` Secret:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: storage-config
+  namespace: ai-agentic
+type: Opaque
+stringData:
+  storage-config: |
+    {
+      "huggingface": {
+        "type": "huggingface",
+        "hf_token": "<token>"
+      }
+    }
+```
+
+### RHOAI dashboard visibility for InferenceService
+
+An `InferenceService` only appears in the RHOAI "Models" dashboard when **all three** of
+these conditions are met:
+
+1. **Namespace label** `opendatahub.io/dashboard: "true"` — registers the namespace as a
+   Data Science Project in RHOAI.
+
+2. **Namespace label** `modelmesh-enabled: "false"` — signals that this namespace uses
+   KServe single-model serving, not ModelMesh multi-model serving. Without this, the RHOAI
+   dashboard shows the namespace but lists no models under "Single-model serving".
+
+3. **`storageUri` present** in `spec.predictor.model` — the dashboard uses the URI to display
+   the model source. An InferenceService with no `storageUri` is valid for KServe but appears
+   blank or hidden in the RHOAI UI.
+
+```yaml
+# namespace.yaml
+metadata:
+  labels:
+    opendatahub.io/dashboard: "true"     # makes namespace a Data Science Project
+    modelmesh-enabled: "false"           # forces KServe mode in the dashboard
+```
 
 ---
 
@@ -305,7 +381,11 @@ entirely on the GPU device.
 
 ---
 
-## Model cache persistence — PVC for HuggingFace download
+## Model cache persistence — PVC for HuggingFace download (bypass pattern only)
+
+> **Note:** this section applies only to the RHOAI 2.25.x bypass pattern where vLLM downloads
+> the model directly. When using `storageUri: hf://...` with the KServe storage initializer,
+> the model is downloaded to `/mnt/models` (an emptyDir managed by KServe) — no PVC is needed.
 
 Without a PVC, vLLM downloads model weights into an `emptyDir` (`HF_HOME=/tmp/hf_home`).
 Every pod restart (node reboot, OOM, scaling event) re-downloads the full model (~14 GiB for Qwen2.5-7B-Instruct), adding 5-10 minutes of cold start.

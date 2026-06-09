@@ -1,14 +1,24 @@
 ---
-# KServe InferenceService — Qwen2.5-7B-Instruct via vLLM GPU runtime.
+# KServe InferenceService — Qwen2.5-1.5B-Instruct via vLLM GPU runtime.
+#
+# Model storage: hf://Qwen/Qwen2.5-1.5B-Instruct
+#   KServe's storage initializer downloads the model from HuggingFace Hub into
+#   /mnt/models before vLLM starts. The ServingRuntime then reads from that path.
+#   Requires RHOAI >= 2.16 (hf:// URI support in the storage initializer).
+#   See docs/learning.md — "RHOAI Connection resources and model storage".
 #
 # Prerequisites:
 #   - ServingRuntime 'vllm-gpu' must exist in this namespace
-#   - Secret 'hf-token' must exist in this namespace (see hf-token-sealed.yaml)
 #   - NVIDIA L4 GPU node must be schedulable (worker-gpu role)
 #
 # Deployment mode: Serverless (default on this cluster — Knative Serving is Managed).
 # The InferenceService gets a Knative Route and scales to 0 when idle.
 # minReplicas: 1 keeps it warm to avoid cold start during the demo.
+#
+# RHOAI dashboard visibility:
+#   - Namespace label opendatahub.io/dashboard: "true" → namespace appears as a project
+#   - Namespace label modelmesh-enabled: "false" → forces KServe (not ModelMesh) mode
+#   - storageUri present → dashboard can display the model source
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
@@ -25,12 +35,4 @@ spec:
       modelFormat:
         name: vLLM
       runtime: vllm-gpu
-      resources:
-        requests:
-          cpu: "2"
-          memory: 10Gi
-          nvidia.com/gpu: "1"
-        limits:
-          cpu: "4"
-          memory: 14Gi
-          nvidia.com/gpu: "1"
+      storageUri: hf://Qwen/Qwen2.5-1.5B-Instruct
