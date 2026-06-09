@@ -436,6 +436,121 @@ For this project (ephemeral RHDP clusters), a PVC is the simplest approach — S
 
 ---
 
+## Knative h2c named port causes 502 on KServe Serverless endpoints
+
+### Root cause
+
+Naming a `ServingRuntime` container port `h2c` forces Knative to use HTTP/2 cleartext
+throughout its entire internal routing chain: ingress gateway → activator → queue-proxy →
+container. When the Knative activator is in `mode: Proxy` (the default while
+`numActivators > 0`), all inbound requests pass through the activator before reaching the
+pod.
+
+With an `h2c` named port the activator's Istio sidecar silently drops the request — it
+returns a TCP-level 502 without ever forwarding to the activator app process. The activator
+application logs show zero entries for those requests. The failure is invisible until you
+check Envoy cluster stats directly.
+
+### Symptom
+
+External endpoint (`qwen-predictor-ai-agentic.apps...`) returns:
+```
+502 Bad Gateway
+```
+
+No error in the vLLM pod logs. No error in the activator app logs. Only visible via:
+```bash
+oc exec -n knative-serving <activator-pod> -c istio-proxy -- \
+  curl -s http://localhost:15000/stats | grep "inbound.*rq_total"
+# rq_total does NOT increase when requests are sent → activator never sees the request
+```
+
+### Fix
+
+Remove the port `name` from the `ServingRuntime` container port definition. An unnamed
+port defaults to HTTP/1.1 to the container — Knative's standard behaviour, and what
+RHOAI's built-in `vllm-cuda-runtime-template` uses:
+
+```yaml
+# BEFORE (broken): h2c port name forces HTTP/2 throughout → activator drops silently
+ports:
+  - name: h2c
+    containerPort: 8080
+    protocol: TCP
+
+# AFTER (fixed): unnamed port = HTTP/1.1 to container → works correctly
+ports:
+  - containerPort: 8080
+    protocol: TCP
+```
+
+### Diagnostic comparison
+
+If you have a working and a broken InferenceService side by side, compare their Knative
+Revision specs:
+
+```bash
+oc get revision <working-revision> -n ai-agentic -o jsonpath='{.spec.containers[0].ports}'
+# [{"containerPort":8080,"protocol":"TCP"}]  ← no name
+
+oc get revision <broken-revision> -n ai-agentic -o jsonpath='{.spec.containers[0].ports}'
+# [{"containerPort":8080,"name":"h2c","protocol":"TCP"}]  ← has h2c name
+```
+
+### Why this matters for RHOAI dashboard
+
+RHOAI's built-in `vllm-cuda-runtime-template` deliberately uses an unnamed port 8080. Any
+custom `ServingRuntime` that copies the `h2c` port name from documentation examples (which
+are often written for non-Istio environments) will exhibit this 502 silently.
+
+---
+
+## KServe InferenceService URL — two external URLs, one with no Route
+
+In KServe Serverless mode, the RHOAI dashboard and `InferenceService` status expose **two
+distinct external URLs**:
+
+| URL pattern | Type | OpenShift Route |
+|---|---|---|
+| `https://qwen-predictor-<namespace>.apps...` | Knative Service URL (per revision) | ✅ Created by Knative networking |
+| `https://qwen-<namespace>.apps...` | InferenceService-level URL | ❌ No Route — handled by Istio VirtualService only |
+
+The second URL (`qwen-<namespace>.apps...`) returns `Application not available` from the
+OpenShift router because no `Route` exists for it. KServe creates only an Istio
+`VirtualService` for the InferenceService-level hostname — Knative does not create a Route
+for it.
+
+**The correct URL to use for API calls is the predictor URL:**
+```
+https://qwen-predictor-<namespace>.apps.<cluster-domain>/v1/chat/completions
+```
+
+This is not a bug — it is the intended architecture of KServe Serverless mode. The
+InferenceService URL would only work if requests entered the cluster through the Istio
+ingress gateway directly (not via an OpenShift Route).
+
+---
+
+## RHOAI dashboard — "Unknown Serving Runtime"
+
+Custom namespace-scoped `ServingRuntime` objects show as **"Unknown Serving Runtime"** in
+the RHOAI dashboard. This is cosmetic only — it does not affect functionality.
+
+RHOAI's dashboard only recognises runtimes defined as OpenShift `Template` objects in the
+`redhat-ods-applications` namespace (the built-in templates). A custom `ServingRuntime` CR
+in the application namespace is valid KServe config but the dashboard has no name mapping
+for it.
+
+**Fix (optional):** add `openshift.io/display-name` annotation to the `ServingRuntime`:
+```yaml
+metadata:
+  annotations:
+    openshift.io/display-name: "vLLM GPU (Qwen)"
+```
+The dashboard will then display this name instead of "Unknown Serving Runtime".
+
+---
+
 ## Bitnami Sealed Secrets chart — OpenShift SCC incompatibility
 
 The upstream Bitnami Sealed Secrets Helm chart hardcodes `runAsUser: 1001` and `fsGroup: 65534` in both `podSecurityContext` and `containerSecurityContext`. OpenShift's restricted SCC rejects pods with hardcoded UIDs/GIDs.
