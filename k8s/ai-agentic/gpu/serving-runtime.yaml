@@ -42,8 +42,7 @@ spec:
         - --max-model-len=8192
         - --max-num-seqs=16
       ports:
-        - name: h2c
-          containerPort: 8080
+        - containerPort: 8080
           protocol: TCP
       resources:
         requests:

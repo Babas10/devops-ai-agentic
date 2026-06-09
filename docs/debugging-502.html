@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>502 Debugging — KServe Inference Endpoint</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #f1f5f9;
+    margin-bottom: 6px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #64748b;
+    font-size: 0.9rem;
+    margin-bottom: 48px;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.78rem;
+    color: #94a3b8;
+  }
+  .legend-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+  }
+
+  /* Timeline */
+  .timeline {
+    max-width: 960px;
+    margin: 0 auto;
+    position: relative;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 28px;
+    top: 0; bottom: 0;
+    width: 2px;
+    background: linear-gradient(to bottom, #334155, #1e293b);
+  }
+
+  /* Step card */
+  .step {
+    display: flex;
+    gap: 20px;
+    margin-bottom: 16px;
+    position: relative;
+  }
+  .step-number {
+    flex-shrink: 0;
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 700;
+    z-index: 1;
+    border: 2px solid transparent;
+    position: relative;
+  }
+  .step-card {
+    flex: 1;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+    cursor: pointer;
+  }
+  .step-card:hover {
+    border-color: #475569;
+  }
+  .step-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: #1a2332;
+    border-bottom: 1px solid #334155;
+  }
+  .step-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .step-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    flex: 1;
+  }
+  .step-resource {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-family: 'Courier New', monospace;
+    background: #0f172a;
+    padding: 3px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .step-body {
+    padding: 16px 18px;
+    display: none;
+  }
+  .step-body.open {
+    display: block;
+  }
+  .step-summary {
+    padding: 12px 18px;
+    font-size: 0.82rem;
+    color: #94a3b8;
+    border-top: 1px solid #0f1117;
+    line-height: 1.5;
+  }
+
+  /* Detail grid */
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .detail-box {
+    border-radius: 8px;
+    padding: 12px;
+    border: 1px solid;
+  }
+  .detail-box .label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+  .detail-box .value {
+    font-size: 0.82rem;
+    line-height: 1.5;
+    font-family: 'Courier New', monospace;
+  }
+  .detail-box.expected {
+    background: #0d2818;
+    border-color: #16a34a;
+  }
+  .detail-box.expected .label { color: #4ade80; }
+  .detail-box.expected .value { color: #86efac; }
+
+  .detail-box.actual-ok {
+    background: #0d2818;
+    border-color: #15803d;
+  }
+  .detail-box.actual-ok .label { color: #4ade80; }
+  .detail-box.actual-ok .value { color: #86efac; }
+
+  .detail-box.actual-warn {
+    background: #1c1205;
+    border-color: #d97706;
+  }
+  .detail-box.actual-warn .label { color: #fbbf24; }
+  .detail-box.actual-warn .value { color: #fcd34d; }
+
+  .detail-box.actual-fail {
+    background: #1a0a0a;
+    border-color: #dc2626;
+  }
+  .detail-box.actual-fail .label { color: #f87171; }
+  .detail-box.actual-fail .value { color: #fca5a5; }
+
+  .detail-box.actual-info {
+    background: #0c1629;
+    border-color: #3b82f6;
+  }
+  .detail-box.actual-info .label { color: #60a5fa; }
+  .detail-box.actual-info .value { color: #93c5fd; }
+
+  /* Next step */
+  .next-step {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-top: 4px;
+  }
+  .next-step strong { color: #cbd5e1; }
+
+  /* What we looked for */
+  .looked-for {
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-bottom: 12px;
+    line-height: 1.5;
+    padding: 8px 12px;
+    background: #0f172a;
+    border-left: 3px solid #475569;
+    border-radius: 0 6px 6px 0;
+  }
+
+  /* Badge colors */
+  .badge-pod { background: #1e3a5f; color: #60a5fa; }
+  .badge-svc { background: #1e3a5f; color: #818cf8; }
+  .badge-is  { background: #1c2438; color: #a78bfa; }
+  .badge-log { background: #1a2332; color: #94a3b8; }
+  .badge-vs  { background: #1a1f2e; color: #6ee7b7; }
+  .badge-cmd { background: #1a1a0a; color: #fde68a; }
+  .badge-ap  { background: #1f1220; color: #e879f9; }
+  .badge-ok  { background: #0d2818; color: #4ade80; }
+  .badge-ep  { background: #1a1f0d; color: #bef264; }
+
+  /* Step number colors */
+  .num-neutral { background: #1e293b; border-color: #475569; color: #94a3b8; }
+  .num-warn    { background: #1c1205; border-color: #d97706; color: #fbbf24; }
+  .num-fail    { background: #1a0a0a; border-color: #dc2626; color: #f87171; }
+  .num-ok      { background: #0d2818; border-color: #16a34a; color: #4ade80; }
+  .num-info    { background: #0c1629; border-color: #3b82f6; color: #60a5fa; }
+
+  /* Connector arrows */
+  .connector {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    padding-left: 68px;
+    margin: -6px 0;
+    color: #334155;
+    font-size: 1.2rem;
+    z-index: 0;
+  }
+
+  /* Conclusion box */
+  .conclusion {
+    max-width: 960px;
+    margin: 32px auto 0;
+    background: #0d2818;
+    border: 2px solid #16a34a;
+    border-radius: 12px;
+    padding: 24px 28px;
+  }
+  .conclusion h2 {
+    color: #4ade80;
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+  }
+  .conclusion p {
+    font-size: 0.88rem;
+    color: #86efac;
+    line-height: 1.7;
+  }
+  .conclusion code {
+    background: #0a1f10;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.82em;
+  }
+
+  /* Toggle hint */
+  .toggle-hint {
+    text-align: center;
+    font-size: 0.75rem;
+    color: #475569;
+    margin-bottom: 24px;
+  }
+
+  code { font-family: 'Courier New', monospace; }
+</style>
+</head>
+<body>
+
+<h1>502 Bad Gateway — Debugging Report</h1>
+<p class="subtitle">KServe InferenceService · Qwen 1.5B · OpenShift AI + Knative Serverless + Istio</p>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#dc2626"></div> Unexpected / failure</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div> Partial / warning</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div> Informational</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#16a34a"></div> Confirmed working</div>
+</div>
+<p class="toggle-hint">Click any step to expand details</p>
+
+<div class="timeline">
+
+  <!-- STEP 1 -->
+  <div class="step">
+    <div class="step-number num-warn">1</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-pod">Pod</span>
+        <span class="step-title">Check pod & InferenceService state</span>
+        <span class="step-resource">oc get pods / oc get inferenceservice</span>
+      </div>
+      <div class="step-summary">Starting point. InferenceService shows READY=False, revision 00006 pod is 2/3 Running, revision 00006 (from minReplicas patch) is Pending.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: all pods 3/3 Running, InferenceService READY=True, single active revision.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">
+              Single revision 3/3 Running<br>
+              READY=True<br>
+              latestReadyRevision set
+            </div>
+          </div>
+          <div class="detail-box actual-warn">
+            <div class="label">Actual</div>
+            <div class="value">
+              qwen-predictor-00006: 2/3 Running<br>
+              qwen-predictor-00006: 0/3 Pending<br>
+              READY=False, latestReadyRevision=00005
+            </div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> Identify which container is not ready in the 2/3 Running pod.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 2 -->
+  <div class="step">
+    <div class="step-number num-warn">2</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-pod">Pod</span>
+        <span class="step-title">Check container readiness in revision 00006 pod</span>
+        <span class="step-resource">oc get pod -o jsonpath=containerStatuses</span>
+      </div>
+      <div class="step-summary">queue-proxy not ready — it was failing to probe port 8080 (connection refused), meaning vLLM hadn't started yet.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: all 3 containers (istio-proxy, kserve-container, queue-proxy) with ready=true.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">istio-proxy: ready=true<br>kserve-container: ready=true<br>queue-proxy: ready=true</div>
+          </div>
+          <div class="detail-box actual-warn">
+            <div class="label">Actual</div>
+            <div class="value">istio-proxy: ready=true<br>kserve-container: ready=true<br>queue-proxy: <strong>ready=false</strong></div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> Check vLLM (kserve-container) logs to see if the model is loading.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 3 -->
+  <div class="step">
+    <div class="step-number num-ok">3</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-log">Logs</span>
+        <span class="step-title">Check vLLM container logs</span>
+        <span class="step-resource">oc logs -c kserve-container</span>
+      </div>
+      <div class="step-summary">vLLM fully started. Routes registered, "Application startup complete". Storage initializer had already downloaded the model to /mnt/models.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: vLLM startup errors, model loading progress, port 8080 listening.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">Application startup complete<br>Listening on port 8080<br>Model loaded from /mnt/models</div>
+          </div>
+          <div class="detail-box actual-ok">
+            <div class="label">Actual</div>
+            <div class="value">Route: /v1/chat/completions<br>Started server process [1]<br>Application startup complete ✓</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> vLLM is healthy. Wait for queue-proxy to become ready, then test the external endpoint.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 4 -->
+  <div class="step">
+    <div class="step-number num-ok">4</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-is">InferenceService</span>
+        <span class="step-title">Check InferenceService detailed status</span>
+        <span class="step-resource">oc get inferenceservice qwen -o json</span>
+      </div>
+      <div class="step-summary">Pod eventually reached 3/3 Running. InferenceService shows READY=True with activeModelState=Loaded, latestReadyRevision=qwen-predictor-00006.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: READY=True, activeModelState=Loaded, valid external URL in status.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">READY=True<br>activeModelState=Loaded<br>failedCopies=0</div>
+          </div>
+          <div class="detail-box actual-ok">
+            <div class="label">Actual</div>
+            <div class="value">READY=True ✓<br>activeModelState=Loaded ✓<br>url=https://qwen-ai-agentic.apps...</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> InferenceService reports Ready. Test the external URL from the status.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 5 -->
+  <div class="step">
+    <div class="step-number num-fail">5</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-cmd">HTTP</span>
+        <span class="step-title">Test the InferenceService external URL</span>
+        <span class="step-resource">curl https://qwen-ai-agentic.apps.cluster-dsxgl.../v1/models</span>
+      </div>
+      <div class="step-summary">OpenShift "Application is not available" page — the URL exists in the InferenceService status but has no backing OpenShift Route.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: JSON model list response from vLLM (HTTP 200).</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">HTTP 200<br>{"object":"list","data":[{"id":"qwen"...}]}</div>
+          </div>
+          <div class="detail-box actual-fail">
+            <div class="label">Actual</div>
+            <div class="value">OpenShift 503 page:<br>"Application is not available"<br>(no route for this hostname)</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> Check if an OpenShift Route exists for this hostname.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 6 -->
+  <div class="step">
+    <div class="step-number num-fail">6</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-svc">Route</span>
+        <span class="step-title">Check OpenShift Routes for qwen endpoints</span>
+        <span class="step-resource">oc get routes -A | grep qwen</span>
+      </div>
+      <div class="step-summary">Only ONE route exists: qwen-predictor-ai-agentic.apps... in istio-system. The main qwen-ai-agentic.apps... URL shown in the RHOAI dashboard has no route.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: OpenShift Route for qwen-ai-agentic.apps.cluster-dsxgl... pointing to the Istio ingress gateway.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">Route for qwen-ai-agentic.apps...<br>→ istio-ingressgateway<br>termination: passthrough</div>
+          </div>
+          <div class="detail-box actual-fail">
+            <div class="label">Actual</div>
+            <div class="value">Only: qwen-predictor-ai-agentic.apps... ✓<br>qwen-ai-agentic.apps... → NOT FOUND<br>(RHOAI dashboard URL is virtual)</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> Understand the URL architecture — check Knative services and VirtualServices to find the real serving URL.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 7 -->
+  <div class="step">
+    <div class="step-number num-info">7</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-svc">Knative</span>
+        <span class="step-title">Check Knative Services (ksvc)</span>
+        <span class="step-resource">oc get ksvc -n ai-agentic</span>
+      </div>
+      <div class="step-summary">Only qwen-predictor Knative Service exists. There is no qwen ksvc. The main URL (qwen-ai-agentic.apps...) is handled by an Istio VirtualService, not a Knative Service — so Knative networking never created an OpenShift Route for it.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: a ksvc named "qwen" that would explain the qwen-ai-agentic.apps... URL having a route.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">ksvc/qwen → qwen-ai-agentic.apps...<br>ksvc/qwen-predictor → qwen-predictor-ai-agentic.apps...</div>
+          </div>
+          <div class="detail-box actual-info">
+            <div class="label">Actual</div>
+            <div class="value">Only: ksvc/qwen-predictor<br>No ksvc/qwen — so no Route for qwen-ai-agentic.apps...<br>The qwen URL is a KServe VirtualService</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> The real external URL is qwen-predictor-ai-agentic.apps... Test it directly.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 8 -->
+  <div class="step">
+    <div class="step-number num-fail">8</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-cmd">HTTP</span>
+        <span class="step-title">Test the predictor external URL (the real route)</span>
+        <span class="step-resource">curl https://qwen-predictor-ai-agentic.apps.cluster-dsxgl.../v1/models</span>
+      </div>
+      <div class="step-summary">curl gets "http2: frame too large" (ALPN negotiated h2 but server replied HTTP/1.1). Python gets HTTP 502 Bad Gateway. The route exists but something in the Istio → Knative chain fails.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: HTTP 200 with model list JSON — confirming end-to-end routing through OpenShift Router → Istio ingress → Knative → pod.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">HTTP 200<br>{"object":"list","data":[...]}</div>
+          </div>
+          <div class="detail-box actual-fail">
+            <div class="label">Actual (curl)</div>
+            <div class="value">http2: frame too large, frame header looked like HTTP/1.1<br>Python: HTTP Error 502: Bad Gateway</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> Isolate vLLM from the network stack — test the pod directly via port-forward.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 9 -->
+  <div class="step">
+    <div class="step-number num-ok">9</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-pod">Pod</span>
+        <span class="step-title">Port-forward directly to the vLLM pod</span>
+        <span class="step-resource">oc port-forward pod/qwen-predictor-00006-... 18081:8013</span>
+      </div>
+      <div class="step-summary">vLLM responds perfectly via port-forward. HTTP 200 with model list. Model loaded from /mnt/models. The issue is entirely in the routing stack, not the application.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: whether vLLM itself is broken, or if the problem is in the Knative/Istio routing layer.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">HTTP 200 — confirms vLLM is healthy</div>
+          </div>
+          <div class="detail-box actual-ok">
+            <div class="label">Actual</div>
+            <div class="value">{"object":"list","data":[{"id":"qwen","root":"/mnt/models"...}]} ✓<br>→ vLLM is healthy. Issue is in routing.</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> Focus on the Istio → Knative routing chain. Check Envoy cluster stats on the Istio ingress gateway.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 10 -->
+  <div class="step">
+    <div class="step-number num-info">10</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-vs">Istio</span>
+        <span class="step-title">Check VirtualServices and Istio gateway listener config</span>
+        <span class="step-resource">oc get vs -n ai-agentic · oc exec istio-ingressgateway -- curl localhost:15000/listeners</span>
+      </div>
+      <div class="step-summary">VirtualServices are correctly configured. Istio listener on port 8443 with SNI *.apps.cluster-dsxgl... matches. TLS cert (knative-serving-cert) is valid. Gateway config is correct.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: misconfigured SNI, missing listener port, expired TLS cert, or wrong backend cluster in the VirtualService.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">Listener on 0.0.0.0:8443<br>SNI: *.apps.cluster-dsxgl...<br>VS routes to qwen-predictor-00006:81</div>
+          </div>
+          <div class="detail-box actual-info">
+            <div class="label">Actual</div>
+            <div class="value">Listener 0.0.0.0:8443 ✓<br>SNI: *.apps.cluster-dsxgl... ✓<br>Cert valid (Let's Encrypt, Jun–Sep 2026) ✓<br>VS routing correct ✓</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> Gateway config is fine. Check Envoy cluster request stats to see where requests die.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 11 -->
+  <div class="step">
+    <div class="step-number num-fail">11</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-vs">Istio</span>
+        <span class="step-title">Check Envoy cluster stats on Istio ingress gateway</span>
+        <span class="step-resource">oc exec istio-ingressgateway -- curl localhost:15000/clusters</span>
+      </div>
+      <div class="step-summary">Requests ARE reaching the Istio gateway and being forwarded to the Knative activator pods. But all requests fail: activator 1 (10.128.2.67) shows 8 errors / 0 success. Activator 2 (10.131.0.60) shows 6 errors / 1 success.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: which backend the Istio ingress gateway is routing to, and whether requests succeed or fail there. Cluster: outbound|81||qwen-predictor-00006.ai-agentic.svc.cluster.local</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">rq_success > 0<br>cx_connect_fail = 0<br>Endpoints pointing to actual pod</div>
+          </div>
+          <div class="detail-box actual-fail">
+            <div class="label">Actual</div>
+            <div class="value">Activator 1 (10.128.2.67): rq_error=8, rq_success=0<br>Activator 2 (10.131.0.60): rq_error=6, rq_success=1<br>cx_connect_fail=0 (TCP connects, but HTTP fails)</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> The endpoint IPs are activator pods, not the actual qwen pod. Check the Kubernetes Endpoints object for the revision service.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 12 -->
+  <div class="step">
+    <div class="step-number num-info">12</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-ep">Endpoints</span>
+        <span class="step-title">Check Endpoints for qwen-predictor-00006 service</span>
+        <span class="step-resource">oc get endpoints qwen-predictor-00006 -n ai-agentic -o yaml</span>
+      </div>
+      <div class="step-summary">The public service endpoints point to Knative activator pods (in knative-serving namespace), not to the actual qwen-predictor pod. This is Knative "Proxy mode" — all traffic routes through the activator.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: endpoint IPs pointing to the qwen-predictor pod (in ai-agentic ns) vs the Knative activator (in knative-serving ns).</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected (Serve mode)</div>
+            <div class="value">Endpoints → 10.129.2.17:8013<br>(qwen-predictor pod in ai-agentic)</div>
+          </div>
+          <div class="detail-box actual-info">
+            <div class="label">Actual (Proxy mode)</div>
+            <div class="value">Endpoints → 10.128.2.67:8013 (activator-dx4wt)<br>             10.131.0.60:8013 (activator-9gjzl)<br>(both in knative-serving)</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> Check why Knative chose Proxy mode. Inspect the ServerlessService resource.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 13 -->
+  <div class="step">
+    <div class="step-number num-fail">13</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-is">ServerlessService</span>
+        <span class="step-title">Check Knative ServerlessService mode</span>
+        <span class="step-resource">oc get serverlessservice qwen-predictor-00006 -n ai-agentic -o yaml</span>
+      </div>
+      <div class="step-summary">ServerlessService is in mode:Proxy with numActivators:4. Condition: "Revision is backed by Activator". In Proxy mode, ALL traffic goes through the activator regardless of pod readiness — but the activator is not forwarding requests.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: mode=Serve (direct routing to pod) or mode=Proxy (activator in critical path). numActivators=0 would mean Serve mode.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">mode: Serve<br>numActivators: 0<br>(pod is ready, minReplicas=1 → bypass activator)</div>
+          </div>
+          <div class="detail-box actual-fail">
+            <div class="label">Actual</div>
+            <div class="value">mode: Proxy<br>numActivators: 4<br>condition: "Revision is backed by Activator"<br>→ autoscaler stuck, won't bypass activator</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> Check activator logs — is the activator forwarding requests to the pod, or returning 502 immediately?</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 14 -->
+  <div class="step">
+    <div class="step-number num-warn">14</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-log">Logs</span>
+        <span class="step-title">Check Knative activator logs</span>
+        <span class="step-resource">oc logs activator-f494b75b9-9gjzl -n knative-serving -c activator</span>
+      </div>
+      <div class="step-summary">Last log entry is from 07:03:11 (minutes before requests were made). The activator logged pod health probe failures (503), then "Set capacity to 2147483647, backends=1". No new log entries when user requests arrive — the activator app is NOT seeing the requests.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: log entries showing the activator receiving and forwarding (or failing to forward) user requests to the pod.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">Log entries when request arrives:<br>"Forwarding request to 10.129.2.17:8013"<br>or forwarding errors</div>
+          </div>
+          <div class="detail-box actual-warn">
+            <div class="label">Actual</div>
+            <div class="value">Last log: 07:03:11 "Set capacity=2147483647"<br>No logs when user requests arrive<br>→ activator app never sees the requests</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> The activator app is not seeing requests. The failure is inside the Istio sidecar on the activator — check Envoy inbound stats on the activator pod.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 15 -->
+  <div class="step">
+    <div class="step-number num-fail">15</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-vs">Istio</span>
+        <span class="step-title">Cross-check Envoy stats: ingress gateway vs activator inbound</span>
+        <span class="step-resource">oc exec activator -- curl localhost:15000/clusters (inbound|8013 stats)</span>
+      </div>
+      <div class="step-summary">Ingress gateway outbound rq_total increases when making a request. Activator inbound rq_total does NOT change. The request is absorbed somewhere between the two Envoy sidecars — the activator's Istio proxy is handling/rejecting the request before routing to the activator application.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: whether requests traverse the activator's Envoy sidecar to the activator application (inbound rq_total should match gateway outbound rq_total).</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">Both counters increase together:<br>gateway outbound rq_total: +1<br>activator inbound rq_total: +1</div>
+          </div>
+          <div class="detail-box actual-fail">
+            <div class="label">Actual</div>
+            <div class="value">gateway outbound rq_total: 7→8 ✓<br>activator inbound rq_total: 16→16 (no change)<br>→ Request dropped in the sidecar layer</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> The 502 is generated inside the activator's Istio sidecar. Check security policies (AuthorizationPolicy, PeerAuthentication) that might be rejecting requests.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 16 -->
+  <div class="step">
+    <div class="step-number num-info">16</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-ap">AuthorizationPolicy</span>
+        <span class="step-title">Check AuthorizationPolicies and Authorino AuthConfig</span>
+        <span class="step-resource">oc get authorizationpolicy -A · oc get authconfig -n ai-agentic</span>
+      </div>
+      <div class="step-summary">AuthorizationPolicy kserve-predictor uses CUSTOM action (Authorino) for all component:predictor pods. Authorino AuthConfig for qwen exists and is READY, with anonymous-access — no token required. Auth is NOT blocking.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: AuthorizationPolicy blocking requests to the activator or predictor, or missing/broken Authorino AuthConfig that would cause Envoy to reject requests.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">AuthConfig exists and is Ready<br>Auth mode: anonymous (open access)<br>Hosts include both predictor URLs</div>
+          </div>
+          <div class="detail-box actual-info">
+            <div class="label">Actual</div>
+            <div class="value">kserve-predictor AP: CUSTOM (Authorino) on component:predictor ✓<br>AuthConfig qwen: READY=True, anonymous-access ✓<br>Hosts: 8/8 linked ✓<br>→ Auth not the blocker</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> Security policies are not the cause. Check activator's outbound connections to the pod — is the activator even attempting to forward user requests?</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 17 -->
+  <div class="step">
+    <div class="step-number num-fail">17</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-vs">Istio</span>
+        <span class="step-title">Check activator outbound connections to the qwen pod</span>
+        <span class="step-resource">oc exec activator -- curl localhost:15000/clusters (outbound|80||qwen-predictor-00006-private)</span>
+      </div>
+      <div class="step-summary">The activator only made 9 connections to the pod: 8 failed health probes (503, during vLLM startup) and 1 successful probe (200, when vLLM was ready). When user requests arrive, the activator does NOT make new outbound connections to the pod — confirming the activator never attempts to forward user traffic.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: outbound rq_total to pod increasing as user requests arrive. Cluster: outbound|80||qwen-predictor-00006-private.ai-agentic.svc.cluster.local</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">rq_total increases when user requests arrive<br>(activator forwarding to pod)</div>
+          </div>
+          <div class="detail-box actual-fail">
+            <div class="label">Actual</div>
+            <div class="value">rq_total: 9 (frozen — all were health probes)<br>rq_error: 8 (startup 503s), rq_success: 1 (probe OK)<br>No new requests when user traffic arrives<br>→ Activator NOT forwarding user requests</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Next:</strong> The activator knows the pod is ready (capacity=2147483647) but still won't forward. This is a state corruption from the multiple revision patches. Validate by testing with a fresh, standard RHOAI InferenceService.</div>
+      </div>
+    </div>
+  </div>
+  <div class="connector">↓</div>
+
+  <!-- STEP 18 -->
+  <div class="step">
+    <div class="step-number num-ok">18</div>
+    <div class="step-card" onclick="toggle(this)">
+      <div class="step-header">
+        <span class="step-badge badge-ok">Validation</span>
+        <span class="step-title">Deploy a fresh InferenceService using RHOAI standard template</span>
+        <span class="step-resource">oc process vllm-cuda-runtime-template | oc apply · InferenceService qwen-test</span>
+      </div>
+      <div class="step-summary">Created a new InferenceService (qwen-test) using RHOAI's built-in vllm-cuda-runtime-template on the same model. After the storage initializer downloaded the model (~20s, cached), the pod became 3/3 Running and the external endpoint immediately returned HTTP 200. End-to-end inference also worked.</div>
+      <div class="step-body">
+        <div class="looked-for">Looking for: whether the 502 is specific to the qwen InferenceService state, or whether the entire Knative/Istio infrastructure is broken.</div>
+        <div class="detail-grid">
+          <div class="detail-box expected">
+            <div class="label">Expected</div>
+            <div class="value">If infra is OK: new IS works, 200 response<br>If infra is broken: same 502 on new IS</div>
+          </div>
+          <div class="detail-box actual-ok">
+            <div class="label">Actual</div>
+            <div class="value">qwen-test READY=True ✓<br>HTTP 200: {"object":"list","data":[{"id":"qwen-test"...}]} ✓<br>Inference: "Hello." in 3 tokens ✓<br>→ Infrastructure is healthy</div>
+          </div>
+        </div>
+        <div class="next-step"><strong>Conclusion:</strong> The 502 on qwen was caused by Knative state corruption (stuck in Proxy mode) from manual InferenceService patches during the GPU deadlock. The fix is to recreate qwen cleanly.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Conclusion -->
+<div class="conclusion">
+  <h2>Root Cause</h2>
+  <p>
+    The 502 was not a networking misconfiguration, mTLS issue, or application bug. It was a
+    <strong>Knative autoscaler state corruption</strong> caused by repeated manual patches to the InferenceService
+    (<code>minReplicas=0</code> → <code>minReplicas=1</code>) made during the GPU scheduling deadlock resolution.
+    Each patch created a new Knative Revision (00002 → 00006), and the Knative autoscaler's
+    <code>ServerlessService</code> got stuck in <code>mode: Proxy</code> with <code>numActivators: 4</code>.
+    In Proxy mode all external traffic flows through the Knative activator, but the activator was in a stale
+    state where it accepted TCP connections yet never forwarded HTTP requests to the pod.
+    The pod itself (vLLM on <code>/mnt/models</code>) was fully healthy throughout.
+    The fix: delete and recreate the InferenceService cleanly using the standard RHOAI
+    <code>vllm-cuda-runtime</code> template.
+  </p>
+</div>
+
+<script>
+function toggle(card) {
+  const body = card.querySelector('.step-body');
+  body.classList.toggle('open');
+}
+</script>
+</body>
+</html>

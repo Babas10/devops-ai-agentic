@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RHOAI Model Serving — Architecture</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #f1f3f5;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 36px 24px 72px;
+    }
+    .header { text-align: center; margin-bottom: 28px; }
+    .header h1 { font-size: 26px; font-weight: 700; color: #1e1e1e; letter-spacing: -.02em; margin-bottom: 6px; }
+    .header p  { color: #666; font-size: 13px; }
+
+    .diagram-container {
+      position: relative;
+      display: inline-block;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08), 0 8px 32px rgba(0,0,0,.06);
+      overflow: visible;
+    }
+    canvas {
+      display: block;
+      background: #fff;
+      border-radius: 12px;
+    }
+    .canvas-outer { overflow-x: auto; display: flex; justify-content: center; }
+
+    /* Info panel — Excalidraw-style solid-shadow card */
+    #panel {
+      display: none;
+      position: absolute;
+      background: #fff;
+      border: 2px solid #1e1e1e;
+      border-radius: 8px;
+      padding: 14px 16px 16px;
+      width: 300px;
+      box-shadow: 6px 6px 0 rgba(0,0,0,.15);
+      z-index: 30;
+      pointer-events: auto;
+    }
+    #panel.visible { display: block; }
+    #panel-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 9px; }
+    #panel-dot  { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+    #panel-title { font-size: 13px; font-weight: 700; color: #1e1e1e; flex: 1; line-height: 1.4; }
+    #panel-close { background: none; border: none; cursor: pointer; font-size: 18px; color: #888; padding: 0; line-height: 1; flex-shrink: 0; }
+    #panel-close:hover { color: #333; }
+    #panel-detail { font-size: 12px; color: #444; line-height: 1.6; margin-bottom: 10px; }
+    #panel-extra  { font-size: 11px; }
+    /* download progress bar */
+    .dl-bar-wrap { background: #f1f3f5; border: 1px solid #dee2e6; border-radius: 4px; height: 8px; overflow: hidden; margin: 6px 0 3px; }
+    .dl-bar      { height: 100%; background: #c07800; border-radius: 4px; transition: width .1s linear; }
+    .dl-counter  { color: #c07800; font-weight: 600; }
+    .dl-files    { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+    .dl-file     { display: flex; align-items: center; gap: 6px; }
+    .dl-file-icon{ font-size: 12px; }
+    .dl-file-name{ color: #333; }
+    .dl-file-check{ margin-left: auto; color: #2b8a3e; font-weight: 700; opacity: 0; transition: opacity .2s; }
+    .dl-file-check.done { opacity: 1; }
+    /* token gen */
+    .tok-box { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+    .tok { background: #d3f9d8; border: 1px solid #2b8a3e; border-radius: 3px; padding: 1px 5px; font-size: 11px; color: #2b8a3e; opacity: 0; transition: opacity .15s; }
+    .tok.show { opacity: 1; }
+    /* cursor */
+    .cursor { display: inline-block; background: #2b8a3e; width: 2px; height: 14px; animation: blink .8s step-end infinite; vertical-align: middle; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .legend {
+      max-width: 1100px; margin: 18px auto 0;
+      display: flex; flex-wrap: wrap; gap: 6px 18px; justify-content: center;
+    }
+    .li { display: flex; align-items: center; gap: 5px; font-size: 12px; color: #555; }
+    .ld { width: 12px; height: 12px; border-radius: 3px; border: 2px solid; flex-shrink: 0; }
+    .hint { text-align: center; font-size: 11px; color: #aaa; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>RHOAI Model Serving Architecture</h1>
+  <p>How Qwen2.5-1.5B-Instruct goes from a Git commit to a live GPU inference endpoint on OpenShift AI.</p>
+</div>
+
+<div class="canvas-outer">
+  <div class="diagram-container">
+    <canvas id="diagram" width="1100" height="740"></canvas>
+    <div id="panel">
+      <div id="panel-header">
+        <div id="panel-dot"></div>
+        <div id="panel-title"></div>
+        <button id="panel-close">&#215;</button>
+      </div>
+      <div id="panel-detail"></div>
+      <div id="panel-extra"></div>
+    </div>
+  </div>
+</div>
+
+<div class="legend">
+  <div class="li"><div class="ld" style="background:#ffe8cc;border-color:#d9480f"></div>GitOps</div>
+  <div class="li"><div class="ld" style="background:#e5dbff;border-color:#6741d9"></div>KServe / K8s</div>
+  <div class="li"><div class="ld" style="background:#dbe4ff;border-color:#3b5bdb"></div>Init / Storage</div>
+  <div class="li"><div class="ld" style="background:#c5f6fa;border-color:#0c8599"></div>Shared Volume</div>
+  <div class="li"><div class="ld" style="background:#fff9db;border-color:#c07800"></div>External</div>
+  <div class="li"><div class="ld" style="background:#ffe3e3;border-color:#c92a2a"></div>GPU</div>
+  <div class="li"><div class="ld" style="background:#d3f9d8;border-color:#2b8a3e"></div>Application</div>
+</div>
+<div class="hint">Click any arrow to see what happens</div>
+
+<script src="https://unpkg.com/roughjs@4.6.6/bundled/rough.js"></script>
+<script>
+window.addEventListener('DOMContentLoaded', () => {
+  const canvas = document.getElementById('diagram');
+  const ctx    = canvas.getContext('2d');
+  const rc     = rough.canvas(canvas);
+  const W = canvas.width, H = canvas.height;
+
+  // ── Palette ─────────────────────────────────────────────────────
+  const C = {
+    orange: { f: '#ffe8cc', s: '#d9480f' },
+    blue:   { f: '#dbe4ff', s: '#3b5bdb' },
+    green:  { f: '#d3f9d8', s: '#2b8a3e' },
+    purple: { f: '#e5dbff', s: '#6741d9' },
+    yellow: { f: '#fff9db', s: '#c07800' },
+    red:    { f: '#ffe3e3', s: '#c92a2a' },
+    cyan:   { f: '#c5f6fa', s: '#0c8599' },
+  };
+  const SEED = 42;
+  const NW = 130, NH = 68;
+
+  // ── Drawing helpers ──────────────────────────────────────────────
+  const ro = (c, ex = {}) => ({
+    roughness:1.4, bowing:.8, fillStyle:'solid',
+    fill: C[c].f, stroke: C[c].s, strokeWidth:1.8, seed:SEED, ...ex
+  });
+
+  function txt(s, x, y, { sz=12, w='600', col='#1e1e1e', al='center' } = {}) {
+    ctx.save();
+    ctx.font = `${w} ${sz}px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif`;
+    ctx.fillStyle = col; ctx.textAlign = al; ctx.textBaseline = 'middle';
+    ctx.fillText(s, x, y);
+    ctx.restore();
+  }
+
+  const NODES = {};
+  function node(x, y, l1, l2, c, id) {
+    rc.rectangle(x, y, NW, NH, ro(c));
+    if (id) NODES[id] = { x, y };
+    const cx = x + NW/2;
+    l2 ? (txt(l1, cx, y+NH/2-9, {sz:12,w:'700'}), txt(l2, cx, y+NH/2+9, {sz:10,w:'400',col:'#555'}))
+       : txt(l1, cx, y+NH/2, {sz:12,w:'700'});
+  }
+
+  // Arrow registry — populated as diagram is drawn
+  const ARROWS = [];
+  function harrow(x1, x2, y, label, c, meta = {}) {
+    rc.line(x1, y, x2, y, { roughness:1.1, strokeWidth:1.8, stroke:C[c].s, seed:SEED });
+    rc.linearPath([[x2-10,y-5],[x2,y],[x2-10,y+5]], { roughness:.7, strokeWidth:1.8, stroke:C[c].s, seed:SEED });
+    if (label) txt(label, (x1+x2)/2, y-10, {sz:9,w:'400',col:'#888'});
+    ARROWS.push({ x1, y1:y, x2, y2:y, c, ...meta });
+  }
+  function varrow(x, y1, y2, c, meta = {}) {
+    rc.line(x, y1, x, y2, { roughness:1.1, strokeWidth:1.8, stroke:C[c].s, seed:SEED });
+    rc.linearPath([[x-6,y2-11],[x,y2],[x+6,y2-11]], { roughness:.7, strokeWidth:1.8, stroke:C[c].s, seed:SEED });
+    ARROWS.push({ x1:x, y1, x2:x, y2, c, ...meta });
+  }
+  function phaseBg(x, y, w, h, c) {
+    rc.rectangle(x, y, w, h, {
+      roughness:.4, bowing:.2, fillStyle:'solid',
+      fill: C[c].f+'33', stroke: C[c].s, strokeWidth:1.4,
+      strokeLineDash:[9,5], seed:SEED
+    });
+  }
+  function phaseLabel(x, y, num, title, desc, c) {
+    rc.circle(x+13, y+13, 26, { roughness:1.2, bowing:1, fillStyle:'solid', fill:C[c].f, stroke:C[c].s, strokeWidth:1.8, seed:SEED });
+    txt(num, x+13, y+14, {sz:13,w:'800',col:C[c].s});
+    txt(title, x+34, y+10, {sz:13,w:'700',col:C[c].s,al:'left'});
+    txt(desc,  x+34, y+26, {sz:10,w:'400',col:'#888',al:'left'});
+  }
+  function callout(x, y, w, h, title, items, c) {
+    rc.rectangle(x, y, w, h, ro(c, {roughness:1}));
+    txt(title, x+14, y+18, {sz:11,w:'700',col:C[c].s,al:'left'});
+    items.forEach((it, i) => txt('\u2192  '+it, x+14, y+38+i*22, {sz:10,w:'400',col:'#333',al:'left'}));
+  }
+
+  // ── Layout ───────────────────────────────────────────────────────
+  const P1X = [40, 218, 396, 574, 752, 930];
+  const P2X = [65, 275, 485, 695, 905];
+  const P1Y=60, P2Y=248, P3Y=598;
+  const AY1=P1Y+NH/2, AY2=P2Y+NH/2, AY3=P3Y+NH/2;
+
+  // ── DRAW STATIC DIAGRAM ──────────────────────────────────────────
+  phaseBg(20, 18,1060,148,'orange');
+  phaseBg(20,210,1060,300,'blue');
+  phaseBg(20,558,1060,160,'green');
+
+  phaseLabel(32, 22,'1','GitOps Deploy', 'triggered by a git push to main','orange');
+  phaseLabel(32,214,'2','Pod Startup',   'init container runs before vLLM starts','blue');
+  phaseLabel(32,562,'3','Inference',     'per-request cycle','green');
+
+  // Phase 1
+  node(P1X[0],P1Y,'Git Repo',      'YAML manifests',      'orange');
+  node(P1X[1],P1Y,'ArgoCD',        'detects drift',       'orange');
+  node(P1X[2],P1Y,'KServe',        'admission webhook',   'purple');
+  node(P1X[3],P1Y,'KServe Operator','reconciles IS',      'blue');
+  node(P1X[4],P1Y,'Predictor Pod', 'Pending \u2192 Running','cyan');
+  node(P1X[5],P1Y,'Knative Route', 'HTTPS endpoint',      'yellow');
+  harrow(P1X[0]+NW,P1X[1],AY1,'webhook',      'orange',{title:'Git webhook triggers ArgoCD',detail:'A push to main notifies ArgoCD. It compares desired state (Git) with live state (cluster) and detects a diff.',type:'flow'});
+  harrow(P1X[1]+NW,P1X[2],AY1,'kubectl apply','orange',{title:'ArgoCD applies manifests',detail:'ArgoCD calls the Kubernetes API to apply the ServingRuntime and InferenceService. Requests go through admission webhooks first.',type:'flow'});
+  harrow(P1X[2]+NW,P1X[3],AY1,'admitted',     'purple',{title:'KServe webhook validates storageUri',detail:'The KServe admission webhook checks the InferenceService spec — including the storageUri format (hf://, s3://, pvc://). If valid, the resource is admitted.',type:'flow'});
+  harrow(P1X[3]+NW,P1X[4],AY1,'creates pod',  'blue',  {title:'KServe Operator creates predictor pod',detail:'The KServe controller reconciles the InferenceService and creates a predictor Deployment. The pod starts in Pending, waiting for the init container to finish.',type:'flow'});
+  harrow(P1X[4]+NW,P1X[5],AY1,'creates route','cyan',  {title:'Knative creates HTTPS Route',detail:'Knative Serving provisions a Route and a Service. Istio provisions a VirtualService. The model endpoint becomes available at a public HTTPS URL.',type:'flow'});
+  varrow(550,166,210,'orange',{title:'Phase 1 complete — pod starting',detail:'All Kubernetes resources are created. The predictor pod is scheduled on the GPU node and the init container begins.',type:'flow'});
+
+  // Phase 2
+  node(P2X[0],P2Y,'Init Container','storage-initializer','blue','init');
+  node(P2X[1],P2Y,'HuggingFace Hub','hf://Qwen/1.5B',   'yellow','hf');
+  node(P2X[2],P2Y,'/mnt/models',   'shared emptyDir',   'cyan','mnt');
+  node(P2X[3],P2Y,'vLLM',          '--model=/mnt/models','purple','vllm2');
+  node(P2X[4],P2Y,'NVIDIA L4',     '\u223c5 GiB VRAM',  'red','gpu2');
+  harrow(P2X[0]+NW,P2X[1],AY2,'reads storageUri', 'blue',  {title:'Init container reads storageUri',detail:'The storage-initializer reads storageUri: hf://Qwen/Qwen2.5-1.5B-Instruct from the InferenceService spec and decides to call the HuggingFace Hub.',type:'flow'});
+  harrow(P2X[1]+NW,P2X[2],AY2,'\u223c3 GB download','yellow',{title:'Downloading model weights from HuggingFace',detail:'The init container calls the HuggingFace Hub API to download model files into /mnt/models — a shared emptyDir volume accessible to all containers.',type:'download',files:['config.json','model.safetensors','tokenizer.json','tokenizer_config.json'],size:'3.1 GB'});
+  harrow(P2X[2]+NW,P2X[3],AY2,'init exits \u2713', 'cyan',  {title:'Init container exits — vLLM starts',detail:'After writing all files to /mnt/models, the init container exits with code 0. Kubernetes then starts the vLLM main container.',type:'flow'});
+  harrow(P2X[3]+NW,P2X[4],AY2,'loads VRAM',       'purple',{title:'vLLM loads model weights onto GPU',detail:'vLLM reads the safetensors files from /mnt/models and loads ~3 GiB of weights onto the NVIDIA L4 GPU VRAM. No network calls. Takes 10–20 s.',type:'load'});
+  varrow(550,510,558,'blue',{title:'Pod ready — serving requests',detail:'The predictor pod is now Running. vLLM is listening on :8080. Knative marks the revision as ready and starts routing traffic.',type:'flow'});
+
+  callout(20,338,520,152,'Init Container \u2014 storage-initializer',[
+    'Reads storageUri: hf://Qwen/Qwen2.5-1.5B-Instruct',
+    'Downloads safetensors weights via HuggingFace Hub',
+    'Writes model files to /mnt/models (shared emptyDir)',
+    'Exits with code 0 \u2192 vLLM container starts next',
+    'No HF token needed \u2014 Qwen2.5 is a public model',
+  ],'blue');
+  callout(560,338,520,152,'vLLM \u2014 main container',[
+    'Starts only after init container exits successfully',
+    'Reads from /mnt/models \u2014 no network at inference time',
+    'Loads weights onto L4 VRAM (5 GiB of 23 GiB available)',
+    'Exposes OpenAI-compatible API on port 8080',
+    '--served-model-name={{.Name}} \u2192 model alias: qwen',
+  ],'purple');
+
+  // Phase 3
+  node(P1X[0],P3Y,'LangGraph Agent','classify/plan/report','green');
+  node(P1X[1],P3Y,'Knative Route',  'HTTPS / TLS',         'yellow');
+  node(P1X[2],P3Y,'Istio',          'service mesh',        'purple');
+  node(P1X[3],P3Y,'KServe Predictor','Envoy sidecar',      'blue');
+  node(P1X[4],P3Y,'vLLM',           'PagedAttention',      'purple');
+  node(P1X[5],P3Y,'Response',       '50\u2013100 tok/s',   'green');
+  harrow(P1X[0]+NW,P1X[1],AY3,'POST /v1/chat','green', {title:'Agent sends inference request',detail:'The LangGraph agent calls ChatOpenAI.invoke() which POSTs a /v1/chat/completions payload to the Knative Route HTTPS endpoint with a 300 s timeout.',type:'request'});
+  harrow(P1X[1]+NW,P1X[2],AY3,'h2c :8080',   'yellow',{title:'Knative routes via Istio gateway',detail:'The Knative Route resolves to an Istio VirtualService which routes HTTP/2 cleartext (h2c) traffic to the predictor pod on port 8080.',type:'flow'});
+  harrow(P1X[2]+NW,P1X[3],AY3,'routes',       'purple',{title:'Istio forwards to predictor sidecar',detail:'The Envoy proxy sidecar inside the predictor pod intercepts the inbound request and forwards it to the vLLM process at localhost:8080.',type:'flow'});
+  harrow(P1X[3]+NW,P1X[4],AY3,'forwards',     'blue',  {title:'vLLM receives the prompt',detail:'vLLM tokenises the prompt, allocates KV-cache blocks via PagedAttention, and begins autoregressive generation — one token per forward pass.',type:'request'});
+  harrow(P1X[4]+NW,P1X[5],AY3,'GPU compute',  'purple',{title:'NVIDIA L4 generates tokens',detail:'Each forward pass through Qwen2.5-1.5B executes on the GPU in a few milliseconds. At ~50–100 tok/s, a 200-token reply takes 2–4 s.',type:'generate',tokens:['The','deployment','is','in','ImagePull','Backoff.','Image','tag','v2.0','not','found.']});
+
+  // Hint text
+  txt('Click any arrow to see what happens', W/2, H-14, {sz:10,w:'400',col:'#bbb'});
+
+  // ── Capture static image ─────────────────────────────────────────
+  let bg = null;
+  createImageBitmap(canvas).then(bmp => { bg = bmp; requestAnimationFrame(loop); });
+
+  // ── Hit testing ──────────────────────────────────────────────────
+  function distToSeg(mx, my, x1, y1, x2, y2) {
+    const dx=x2-x1, dy=y2-y1, len2=dx*dx+dy*dy;
+    if (len2===0) return Math.hypot(mx-x1,my-y1);
+    const t = Math.max(0,Math.min(1,((mx-x1)*dx+(my-y1)*dy)/len2));
+    return Math.hypot(mx-(x1+t*dx), my-(y1+t*dy));
+  }
+  function evPos(e) {
+    const r = canvas.getBoundingClientRect();
+    return { mx: e.clientX-r.left, my: e.clientY-r.top };
+  }
+  function hitArrow(mx, my) {
+    return ARROWS.find(a => distToSeg(mx,my,a.x1,a.y1,a.x2,a.y2) < 14) || null;
+  }
+
+  let hoveredArrow = null;
+  canvas.addEventListener('mousemove', e => {
+    const { mx, my } = evPos(e);
+    hoveredArrow = hitArrow(mx, my);
+    canvas.style.cursor = hoveredArrow ? 'pointer' : 'default';
+  });
+  canvas.addEventListener('mouseleave', () => { hoveredArrow = null; });
+
+  // ── Animation state ──────────────────────────────────────────────
+  let anim = null;
+  const DURATIONS = { flow:1400, download:3600, load:2600, request:1400, generate:2800 };
+
+  canvas.addEventListener('click', e => {
+    const { mx, my } = evPos(e);
+    const a = hitArrow(mx, my);
+    if (!a) return;
+    anim = { arrow:a, t0: performance.now(), done:false };
+    openPanel(a, mx, my);
+  });
+
+  // ── Info panel ───────────────────────────────────────────────────
+  const panel      = document.getElementById('panel');
+  const panelDot   = document.getElementById('panel-dot');
+  const panelTitle = document.getElementById('panel-title');
+  const panelClose = document.getElementById('panel-close');
+  const panelDetail= document.getElementById('panel-detail');
+  const panelExtra = document.getElementById('panel-extra');
+
+  panelClose.addEventListener('click', () => {
+    panel.classList.remove('visible');
+    anim = null;
+  });
+
+  function openPanel(arrow, mx, my) {
+    panelDot.style.background   = C[arrow.c].s;
+    panelDot.style.border       = 'none';
+    panelTitle.textContent       = arrow.title  || arrow.c;
+    panelDetail.textContent      = arrow.detail || '';
+    panelExtra.innerHTML         = buildExtra(arrow);
+
+    // Position near click, keep within container
+    const cRect = canvas.getBoundingClientRect();
+    const cont  = canvas.parentElement;
+    let px = mx + 16, py = my - 10;
+    if (px + 310 > W) px = mx - 326;
+    if (py + 220 > H) py = H - 220;
+    if (py < 10) py = 10;
+    panel.style.left = px + 'px';
+    panel.style.top  = py + 'px';
+    panel.classList.add('visible');
+
+    // For download/generate, start ticker
+    if (arrow.type === 'download') startDlTicker(arrow);
+    if (arrow.type === 'generate') startGenTicker(arrow);
+  }
+
+  function buildExtra(arrow) {
+    if (arrow.type === 'download') {
+      const rows = (arrow.files || []).map(f =>
+        `<div class="dl-file">
+           <span class="dl-file-icon">&#128196;</span>
+           <span class="dl-file-name">${f}</span>
+           <span class="dl-file-check" id="chk-${f.split('.')[0]}">&#10003;</span>
+         </div>`
+      ).join('');
+      return `<div class="dl-bar-wrap"><div class="dl-bar" id="dl-bar" style="width:0%"></div></div>
+              <div class="dl-counter" id="dl-cnt">0 MB / ${arrow.size}</div>
+              <div class="dl-files">${rows}</div>`;
+    }
+    if (arrow.type === 'generate') {
+      const toks = (arrow.tokens || []).map((t,i) =>
+        `<span class="tok" id="tok-${i}">${t}</span>`
+      ).join('');
+      return `<div style="color:#888;font-size:11px;margin-bottom:4px">Tokens generated:</div>
+              <div class="tok-box">${toks}<span class="cursor"></span></div>`;
+    }
+    return '';
+  }
+
+  function startDlTicker(arrow) {
+    const total = 3100;
+    const dur   = DURATIONS.download;
+    const t0    = performance.now();
+    const files = arrow.files || [];
+    function tick() {
+      if (!anim) return;
+      const p = Math.min((performance.now()-t0)/dur, 1);
+      const bar = document.getElementById('dl-bar');
+      const cnt = document.getElementById('dl-cnt');
+      if (bar) bar.style.width = (p*100).toFixed(1)+'%';
+      if (cnt) cnt.textContent = Math.round(p*total)+' MB / '+arrow.size;
+      files.forEach((f, i) => {
+        const el = document.getElementById('chk-'+f.split('.')[0]);
+        if (el && p > (i+1)/files.length * 0.9) el.classList.add('done');
+      });
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function startGenTicker(arrow) {
+    const tokens = arrow.tokens || [];
+    const dur    = DURATIONS.generate;
+    const t0     = performance.now();
+    function tick() {
+      if (!anim) return;
+      const p = Math.min((performance.now()-t0)/dur, 1);
+      const shown = Math.floor(p * tokens.length);
+      tokens.forEach((_, i) => {
+        const el = document.getElementById('tok-'+i);
+        if (el && i < shown) el.classList.add('show');
+      });
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // ── Canvas animations ────────────────────────────────────────────
+
+  function drawHover(a) {
+    if (!a) return;
+    ctx.save();
+    ctx.strokeStyle = C[a.c].s;
+    ctx.lineWidth   = 6;
+    ctx.globalAlpha = 0.18;
+    ctx.lineCap     = 'round';
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(a.x1, a.y1);
+    ctx.lineTo(a.x2, a.y2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawAnim(ts) {
+    if (!anim) return;
+    const elapsed = ts - anim.t0;
+    const { arrow } = anim;
+    const dur  = DURATIONS[arrow.type] || 1400;
+    const p    = Math.min(elapsed/dur, 1);
+    const cycleP = (elapsed % dur) / dur; // looping progress
+
+    switch (arrow.type) {
+      case 'download': drawDownload(arrow, p, ts); break;
+      case 'load':     drawLoad(arrow, p, ts); break;
+      case 'generate': drawGenerate(arrow, p, ts); break;
+      default:         drawFlow(arrow, cycleP, ts); break;
+    }
+
+    // Stop non-looping anims after 1 cycle + a pause
+    if ((arrow.type === 'download' || arrow.type === 'load' || arrow.type === 'generate') && elapsed > dur + 800) {
+      anim = null;
+    }
+  }
+
+  // Generic dots flowing along an arrow
+  function drawFlow(arrow, p, ts) {
+    const { x1,y1,x2,y2,c } = arrow;
+    for (let i=0; i<5; i++) {
+      const t = (p + i*0.2) % 1;
+      const fade = t<.12 ? t/.12 : t>.88 ? (1-t)/.12 : 1;
+      ctx.save();
+      ctx.globalAlpha = fade * 0.9;
+      ctx.beginPath();
+      ctx.arc(x1+t*(x2-x1), y1+t*(y2-y1), 5, 0, Math.PI*2);
+      ctx.fillStyle = C[c].s;
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // File icons flowing from HuggingFace → /mnt/models
+  function drawDownload(arrow, p, ts) {
+    const { x1,y1,x2,y2 } = arrow;
+    const fileNames = ['config', 'model', 'tokenizer', 'tok_config'];
+    const colors = ['#fff9db','#ffe8cc','#dbe4ff','#d3f9d8'];
+    const strokes = ['#c07800','#d9480f','#3b5bdb','#2b8a3e'];
+
+    fileNames.forEach((name, i) => {
+      const delay = i * 0.22;
+      const ft = Math.max(0, Math.min(1, (p - delay) * 1.8));
+      if (ft <= 0) return;
+
+      const fx = x1 + ft*(x2-x1) - 18;
+      const fy = y1 - 24;
+
+      ctx.save();
+      ctx.fillStyle = colors[i];
+      ctx.strokeStyle = strokes[i];
+      ctx.lineWidth = 1.5;
+      // File body
+      ctx.beginPath();
+      ctx.rect(fx, fy, 36, 26);
+      ctx.fill(); ctx.stroke();
+      // Dog-ear
+      ctx.fillStyle = strokes[i]+'55';
+      ctx.beginPath();
+      ctx.moveTo(fx+26, fy); ctx.lineTo(fx+36, fy+10); ctx.lineTo(fx+26, fy+10); ctx.closePath();
+      ctx.fill();
+      // Label
+      ctx.font = '7px monospace';
+      ctx.fillStyle = '#333';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(name, fx+18, fy+18);
+      ctx.restore();
+    });
+
+    // Progress bar along the arrow path
+    const barH = 5;
+    ctx.save();
+    ctx.fillStyle = '#f1f3f5';
+    ctx.strokeStyle = '#dee2e6';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.rect(x1, y1+14, x2-x1, barH); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#c07800';
+    ctx.beginPath(); ctx.rect(x1, y1+14, (x2-x1)*p, barH); ctx.fill();
+    ctx.restore();
+
+    // Folder fill effect on /mnt/models node
+    const mnt = NODES['mnt'];
+    if (mnt) {
+      const fillH = p * NH;
+      ctx.save();
+      ctx.globalAlpha = 0.25;
+      ctx.fillStyle = '#0c8599';
+      ctx.beginPath();
+      ctx.rect(mnt.x+2, mnt.y+NH-fillH, NW-4, fillH);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Blocks flowing from vLLM → GPU
+  function drawLoad(arrow, p, ts) {
+    const { x1,y1,x2,y2 } = arrow;
+    const numBlocks = 8;
+    for (let i=0; i<numBlocks; i++) {
+      const delay = i * 0.1;
+      const bt = Math.max(0, Math.min(1, (p - delay)*2));
+      if (bt <= 0) continue;
+      const bx = x1 + bt*(x2-x1);
+      const by = y1;
+      const sz = 12;
+      const alpha = 1 - bt*0.4;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = `hsl(${260+i*5},65%,${62-i*3}%)`;
+      ctx.strokeStyle = '#6741d9';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.rect(bx-sz/2, by-sz/2, sz, sz); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    // VRAM fill on GPU node
+    const gpu = NODES['gpu2'];
+    if (gpu) {
+      const fillH = p * NH;
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = '#f85149';
+      ctx.beginPath(); ctx.rect(gpu.x+2, gpu.y+NH-fillH, NW-4, fillH); ctx.fill();
+      // Label
+      ctx.globalAlpha = 0.85;
+      ctx.font = 'bold 9px monospace';
+      ctx.fillStyle = '#c92a2a';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(Math.round(p*5)+' GiB loaded', gpu.x+NW/2, gpu.y+NH/2);
+      ctx.restore();
+    }
+  }
+
+  // Token boxes appearing above the arrow
+  function drawGenerate(arrow, p, ts) {
+    const tokens = arrow.tokens || [];
+    const shown  = Math.floor(p * tokens.length);
+    const baseX  = arrow.x1;
+    const baseY  = arrow.y1 - 28;
+
+    tokens.slice(0, shown).forEach((tok, i) => {
+      const col = i % 2 === 0 ? { f:'#d3f9d8',s:'#2b8a3e' } : { f:'#dbe4ff',s:'#3b5bdb' };
+      const tw = tok.length * 7 + 10;
+      // stack tokens in a row; wrap if too wide
+      let rowX = baseX, rowY = baseY;
+      let running = 0;
+      for (let j=0; j<i; j++) {
+        running += tokens[j].length*7+10+4;
+        if (running > (arrow.x2-arrow.x1)) { running=0; rowY-=22; }
+      }
+      rowX = baseX + running;
+      ctx.save();
+      ctx.fillStyle = col.f; ctx.strokeStyle = col.s; ctx.lineWidth = 1.3;
+      ctx.beginPath(); ctx.rect(rowX, rowY, tw, 18); ctx.fill(); ctx.stroke();
+      ctx.font = 'bold 10px monospace'; ctx.fillStyle = col.s;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      ctx.fillText(tok, rowX+5, rowY+9);
+      ctx.restore();
+    });
+
+    // Blinking cursor
+    if (shown < tokens.length || (Math.floor(ts/500)%2===0)) {
+      const lastIdx = shown - 1;
+      let curX = baseX, curY = baseY, running2 = 0;
+      for (let j=0; j<shown; j++) {
+        running2 += tokens[j].length*7+10+4;
+        if (running2>(arrow.x2-arrow.x1)) { running2=0; curY-=22; }
+        curX = baseX+running2;
+      }
+      ctx.save();
+      ctx.fillStyle = '#2b8a3e';
+      ctx.beginPath(); ctx.rect(curX, curY+2, 2, 14); ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ── Main render loop ─────────────────────────────────────────────
+  function loop(ts) {
+    ctx.clearRect(0, 0, W, H);
+    if (bg) ctx.drawImage(bg, 0, 0);
+    drawHover(hoveredArrow);
+    drawAnim(ts);
+    requestAnimationFrame(loop);
+  }
+});
+</script>
+</body>
+</html>
