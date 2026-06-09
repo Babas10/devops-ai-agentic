@@ -19,6 +19,12 @@ kind: ServingRuntime
 metadata:
   name: vllm-gpu
   namespace: ai-agentic
+  annotations:
+    openshift.io/display-name: "vLLM GPU (Qwen — NVIDIA L4 tuned)"
+    opendatahub.io/recommended-accelerators: '["nvidia.com/gpu"]'
+    opendatahub.io/runtime-version: v0.10.1.1
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8080"
 spec:
   supportedModelFormats:
     - name: vLLM
@@ -32,6 +38,9 @@ spec:
         - python
         - -m
         - vllm.entrypoints.openai.api_server
+      env:
+        - name: HF_HOME
+          value: /tmp/hf_home
       args:
         # KServe's storage initializer downloads the model from hf://Qwen/Qwen2.5-1.5B-Instruct
         # into /mnt/models before this container starts. vLLM reads from that local path.
